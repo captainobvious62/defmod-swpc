@@ -15,9 +15,26 @@ program main
   real(8),pointer :: null_r=>null()
   real(8) :: fdt
   integer :: i,j,j1,j2,j3,j4,j5,j6,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
-  
-  call PetscInitialize(Petsc_Null_Character,ierr)
 
+  ! Petsc Meshing/DMDA Stuff
+  DM        :: dm
+  Vec       :: Vec_Coordinates
+  character(256) :: exofile
+  integer   :: Int_elem, coord_len
+  real(kind=8), allocatable :: PETSc_coords(:,:), PETSc_coords_array(:)
+  PetscBool :: interpolate,em
+  REAL(8),POINTER :: PETSc_pntr(:)  
+  ! Global Vectors
+  Vec :: GVec_displacement,GVec_rhob
+  
+  ! Local Vectors
+  Vec :: LVec_rhob
+  
+  ! Viewer Related
+  PetscViewer :: H5Viewer,ASCIIViewer
+  
+!-----------------------------------------------------------------------------80  
+  call PetscInitialize(Petsc_Null_Character,ierr)
   call MPI_Comm_Rank(MPI_Comm_World,rank,ierr)
   call MPI_Comm_Size(MPI_Comm_World,nprcs,ierr)
 
@@ -25,6 +42,9 @@ program main
   call PetscOptionsGetString(Petsc_Null_Character,'-f',input_file,l,ierr)
   call PetscOptionsGetString(Petsc_Null_Character,'-ss',viz,v,ierr)
   call PetscOptionsGetString(Petsc_Null_Character,'-fd',fd,w,ierr)
+  ! Flag to load .exo directly
+  CALL PetscOptionsGetString(Petsc_Null_Character,'-m',exofile,em,ierr)    
+  
 #else
   call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-f',      &
      input_file,l,ierr)
@@ -32,6 +52,9 @@ program main
      viz,v,ierr)
   call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-fd',     &
      fd,w,ierr)
+  ! Flag to load .exo directly     
+  CALL PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-m' ,     &
+       exofile,em,ierr)     
 #endif
   if (.not. l) then
      call PrintMsg("Usage: [mpiexec -n <np>] defmod -f <input_filename>")
@@ -43,7 +66,7 @@ program main
      if (vout==1) then 
         call PrintMsg("Snapshot output will slow the run!")
      else
-        call PrintMsg("Shosen NOT to output snapshot.")
+        call PrintMsg("Chosen NOT to output snapshot.")
      end if
   else
      call PrintMsg("Use -ss 1 to turn on the snapshot output.")
@@ -53,7 +76,7 @@ program main
      read (fd,'(I1.0)')fdout
      if (fdout==1) call PrintMsg("Runing in FE-FD mixed mode.")
   else
-     call PrintMsg("Use -fd 1 to turn on FE-FD mixd mode.")
+     call PrintMsg("Use -fd 1 to turn on FE-FD mixed mode.")
   end if
 
   ! Read input file parameters
@@ -68,6 +91,43 @@ program main
 
   call PrintMsg("Reading input ...")
   call ReadParameters
+
+
+  !===========================================================================80
+  ! Read/Test Direct .exo reading
+  !---------------------------------------------------------------------------80
+  IF (em) THEN
+    interpolate=.TRUE.  
+    CALL DMPlexCreateFromFile(Petsc_Comm_World, exofile, Petsc_False, dm, ierr)
+    !CALL DMViewFromOptions(dm, PETSC_NULL_OBJECT, "-orig_dm_view");CHKERRQ(ierr)
+
+    ! Read in mesh particulars, generate reference vectors
+    CALL PrintMsg('Reading Nodal Coordinates from PETSc')
+    CALL DMGetCoordinates(dm,Vec_Coordinates,ierr);CHKERRQ(ierr)
+    CALL PrintMsg('Reading # of Coordinates')
+    CALL VecGetSize(Vec_Coordinates,Int_elem,ierr)
+    ! Deal with coords in FORTRAN Variables
+    CALL PrintMsg('Converting to FORTRAN Variables')
+    CALL DMGetDimension(dm,dmn,ierr)
+    print *, Int_elem, dmn
+    coord_len = Int_elem/dmn
+    allocate( PETSc_coords(coord_len,dmn),PETSc_coords_array(Int_elem))
+    CALL PrintMsg('Trying to read from Array')
+    CALL VecGetArrayReadF90(Vec_Coordinates,PETSc_pntr,ierr)
+    PETSc_coords_array=PETSc_pntr
+    PETSc_coords=RESHAPE(PETSc_pntr,(/dmn,coord_len/))
+    CALL PrintMsg('Restoring Data')
+    CALL VecRestoreArrayReadF90(Vec_Coordinates,PETSc_pntr,ierr)
+    !Reshape to (nnds,dmn)
+    ! Write to test output file
+ ! Requires PETSc Reference Section
+    CALL DMCreateGlobalVector(dm,GVec_rhob,ierr)    
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'coord.out',ASCIIViewer,ierr)
+   ! CALL VecView(Vec_Coordinates,ASCIIViewer,ierr)
+    CALL DMView(dm, ASCIIViewer, ierr)
+    !CALL PetscIntView(1,Int_elem,PETSC_VIEWER_STDOUT_WORLD,ierr)
+  END IF
+!-----------------------------------------------------------------------------80
 
   ! Set element specific constants
   call InitializeElement
