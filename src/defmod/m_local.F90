@@ -98,14 +98,33 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
              call Matbetad(betad,estress(i,:),visc,expn)
              call MatInv(V+alpha*dt*betad,D)
           end if
+
+          ! Elastic stiffness matrix, K_e
+          ! K_e = B^T * D * B
           kl=kl+matmul(transpose(B),matmul(D,B))*weight(i)*detj
           kl=>k(eldof+1:,eldof+1:)
+          
+          ! Fluid Stiffness (Permeability) Matrix, K_c 
+          ! K_c = dN^T * k/mu * dN          
           kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*theta*dt*s*s
+
+          ! Pore Pressure Stabilization Matrix, H_s
+          ! H_s =   
           kl=kl+matmul(transpose(N-pN),N-pN)*weight(i)*detj*s*s*0.5d0/G
+
+          ! Storage Matrix, S_p
+          ! S_p = (N^T*N) * c_t
+          ! c_t =  (Biot - phi)*(1-Biot)/Kbulk + phi/c_f 
           kl=kl+matmul(transpose(N),N)*((Bc-fi)*Ksinv+fi/Kf)*weight(i)*detj*s*s
           kl=>k(:eldof,eldof+1:)
+          
+          ! Coupling Matrix, H
+          ! H = B^T * biot * N          
           kl=kl+matmul(transpose(B),matmul(m,N))*Bc*weight(i)*detj*s
           kl=>k(eldof+1:,:eldof)
+          
+          ! Transpose Coupling Matrix, H^T
+          ! H^T = B * biot * N^T              
           kl=kl-transpose(matmul(transpose(B),matmul(m,N))*Bc*weight(i)*detj)*s
        end do
     end if
@@ -113,6 +132,7 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
        do i=1,nip
           call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
           kl=>k(eldof+1:,eldof+1:)
+          ! Fluid Stiffness (Permeability) Matrix, K_c                    
           kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*s*s
        end do
     end if

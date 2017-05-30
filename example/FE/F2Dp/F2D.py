@@ -10,7 +10,7 @@ dt_hr=12.
 ndy=72
 t = 3600.*24*ndy; dt = 3600.*dt_hr; nviz = 1 
 t_dyn = 0.025; dt_dyn=1.6E-5; t_lim = 5.; dsp=1; dsp_hyb=0; dsp_str=1; rsf=1; v_bg=1E-12
-bod_frc=0; hyb=1; nviz_dyn=960; nviz_wave=80; nviz_slip=200; init=1
+bod_frc=1; hyb=1; nviz_dyn=960; nviz_wave=80; nviz_slip=200; init=1
 alpha= 0.; beta = 0.00125; rfrac = 0
 line1 = ["fault-p qua 12"]
 line3 = np.array([t, dt, nviz, dsp]).reshape(1,4)
@@ -43,7 +43,7 @@ visc = 1E25; r = 1.
 B=0.9 #Biot coef
 phi=.15 #porosity
 cf=1E9 #fluid bulk modulus 
-source = -1.8E5 #source/sink -2.05E5
+source = 0.0 #source/sink -2.05E5
 if init==1:
     mat = [[E[0], nu[0], visc, r, rho[0], K[0], B, phi, cf,    0.,E_dyn[0],nu_dyn[0]],
            [E[1], nu[1], visc, r, rho[1], K[1], B, phi, cf,source,E_dyn[1],nu_dyn[1]],
@@ -248,7 +248,7 @@ for node in bcy_nodes:
     bc_typ[node - 1, 1] = 0
 
 # nodal force/flux 
-flux=-250.*(dt_hr/24.) #-144. -288. -112.5 250.
+flux=0.*(dt_hr/24.) #-144. -288. -112.5 250.
 # Constant source 
 #fnodes = [[-1, -2, 0, 0, 0,   2*24*3600, t/2.],
 #         [.25, -2, 0, 0, flux,2*24*3600, t/2.]]

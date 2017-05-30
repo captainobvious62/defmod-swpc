@@ -151,7 +151,8 @@ program main
         nodes=nodes-1
         call METIS_PartMeshNodal(nels,nnds,work,nodes,null_i,null_i,nprcs,     &
            null_r,null_i,n,epart,npart)
-        deallocate(nodes,work)
+        DEALLOCATE(nodes,work)
+        ! Return to beginning of input file; read parameters in again
         rewind(10); call ReadParameters
      end if
      call MPI_Bcast(npart,nnds,MPI_Integer,0,MPI_Comm_World,ierr)
@@ -170,6 +171,8 @@ program main
   end do
   n=sum(epart); allocate(nodes(n,npel),id(n)) ! id -> mtrl flag
   j=1
+  ! Read nodes associated with element (sequentially), plus elemental
+  ! material flag
   do i=1,nels
      if (epart(i)==1) then
         read(10,*)nodes(j,:),id(j); j=j+1
@@ -210,7 +213,8 @@ program main
   end do
   n=sum(npart); allocate(coords(n,dmn),bc(n,dmn+p))
   j=1
-  do i=1,nnds
+  ! Read [sequentially] nodal coordinates and BC flags: x,y,z and/or p
+  DO i=1,nnds
      if (npart(i)==1) then
         read(10,*)coords(j,:),bc(j,:); j=j+1
      else
@@ -279,7 +283,7 @@ program main
                 dt/km2m)
   end if
 
-  ! Form stiffness matrix
+  ! Form stiffness matrix (K)
   call PrintMsg("Forming [K] ...")
   nodal_bw=(dmn+p)*(nodal_bw+1)
   call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,nodal_bw,   &
@@ -393,8 +397,10 @@ program main
            qs_flt_slip(n_lmnd*dmn))
         qs_flt_slip=f0
      end if
-     if (rank==0) open(15,file="cnstrns.tmp",status="replace")
-     do i=1,nceqs
+     ! Open cnstrns.tmp to store constraint equation data
+     IF (rank==0) OPEN(15,file="cnstrns.tmp",status="replace")
+     DO i=1,nceqs
+        ! Read in number of constraint equation terms
         read(10,*)n
         if (rank==0) write(15,*)n
         do j=1,n
@@ -402,7 +408,8 @@ program main
            if (rank==0) write(15,*)real(vvec),node
         end do
         read(10,*)cval(i,:)
-        if (poro) then
+        IF (poro) THEN
+           ! Scale constraint value if nonzero p coefficient
            if (vvec(dmn+1)/=f0) cval(i,1)=cval(i,1)/scale
         end if
         if (rank==0) write(15,*)real(cval(i,:))
@@ -483,9 +490,12 @@ program main
   call PrintMsg("Forming RHS ...")
   call VecDuplicate(Vec_U,Vec_F,ierr)
   tstep=0
-  do i=1,nfrcs
+  ! Read in nodal force / fluid source values and time intervals
+  DO i=1,nfrcs
      read(10,*)fnode(i),fval(i,:)
-  end do
+  END DO
+  ! Read in traction BC data; element ID, facet number, traction/flux value,
+  ! and applied time interval
   do i=1,ntrcs
      read(10,*)telsd(i,:),tval(i,:)
   end do
@@ -522,7 +532,7 @@ program main
   end if
 
   ! Account for absorbing boundaries
-  call PrintMsg("Absorbing bundary ...")
+  call PrintMsg("Absorbing boundary ...")
   if (stype=="explicit" .or. (fault .and. nceqs>0)) then
      do i=1,nabcs
         ! For axis aligned absorbing boundaries
@@ -604,9 +614,9 @@ program main
         allocate(ss(j),sh(j),f2s(j),dip(j),nrm(j))
      end if
   end if
-
+  !===========================================================================80
   ! Implicit Solver
-  if (stype/="explicit" .and. (.not. fault)) then
+  IF (stype/="explicit" .AND. (.NOT. fault)) THEN
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
      call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
@@ -753,16 +763,18 @@ program main
         call VecDestroy(Vec_Um,ierr)
      end if
      call KSPDestroy(Krylov,ierr)
-  end if
+  END IF
+  !---------------------------------------------------------------------------80
 
+  !===========================================================================80
   ! Fault/hybrid solver
-  if (fault) then
+  IF (fault) THEN
      ! Local to global fault node map
      if (nceqs-nceqs_ncf>0) call GetFltMap
-     if (bod_frc==1) then
+     IF (bod_frc==1) THEN
         call PrintMsg("Applying gravity ...")
-        call ApplyGravity
-     end if
+        CALL ApplyGravity
+     END IF
      call KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
      call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
@@ -1255,12 +1267,12 @@ program main
               if (nobs_loc>0) call WriteOutput_obs
            end if
 
-           ! Determine if the fault shall fail by LM 
+           ! Determine if the fault will fail by LM 
            if (nceqs-nceqs_ncf>0 .and. hyb>0) then
               call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               call LM_s2d  
               call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-              ! Determine if the fault shall fail
+              ! Determine if the fault will fail
               call GetSlip_sta
               rslip=real(sum(slip))/real(size(slip))
               if (rank==0) print'(F0.2,A)',rslip*100.0,"% fault critical."
@@ -1507,10 +1519,12 @@ program main
      call VecScatterDestroy(Scatter_s2d,ierr)
      call VecScatterDestroy(Scatter_dyn,ierr)
      call KSPDestroy(Krylov,ierr)
-  end if ! Fault solver
+  END IF ! Fault solver
+  !---------------------------------------------------------------------------80
 
+  !===========================================================================80
   ! Explicit (Green's function) Solver
-  if (stype=="explicit" .and. t>f0 .and. dt>f0 .and. t>=dt) then
+  IF (stype=="explicit" .AND. t>f0 .AND. dt>f0 .AND. t>=dt) THEN
      steps=int(ceiling(t/dt))
      ! Initialize work vectors
      call VecDuplicate(Vec_U,Vec_Um,ierr)
@@ -1660,7 +1674,8 @@ program main
      call VecDestroy(Vec_Um,ierr)
      call VecDestroy(Vec_Up,ierr)
      call VecDestroyVecsF90(6,Vec_W,ierr)
-  end if ! Explicit solver
+  END IF ! Explicit solver
+  !---------------------------------------------------------------------------80
 
   ! Cleanup
   call PrintMsg("Cleaning up ...")
@@ -1681,10 +1696,12 @@ program main
   end if
   call PrintMsg("Finished")
 
-9 call PetscFinalize(ierr)
+9 CALL PetscFinalize(ierr)
+  !---------------------------------------------------------------------------80
 
-contains
-
+  !===========================================================================80
+CONTAINS
+  
   ! Read simulation parameters
   subroutine ReadParameters
     implicit none
