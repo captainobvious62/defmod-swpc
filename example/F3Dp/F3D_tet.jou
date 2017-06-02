@@ -76,4 +76,5 @@ block 3 group salt
 block 4 group hyd
 block 5 group over
 export mesh "./F3D_tet.exo" dimension 3 overwrite
-quit
+##quit
+
