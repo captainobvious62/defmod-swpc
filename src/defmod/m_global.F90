@@ -1,774 +1,807 @@
 ! Copyright (C) 2010-2015 ../AUTHORS. All rights reserved.
 ! This file is part of Defmod. See ../COPYING for license information.
 
-module global
+MODULE global
 
 #include <petscversion.h>
 
-  use local
-  implicit none
+  USE local
+  IMPLICIT NONE
 #include "petscdef.h"
   ! Global variables
-  integer :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,lm_str,  &
+  INTEGER :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,lm_str,  &
      bod_frc,steps,tstep,steps_dyn,tstep_dyn,nfnd,hyb,frq_dyn,nobs,n_log,      &
      n_log_dyn,n_log_wave,ih,igf,rsf,n_log_slip,nceqs_ncf,init,frq_wave,       &
-     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc
-  real(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_sta,t_abs,&
+     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,DPFlag
+  REAL(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_sta,t_abs,&
      t_hyb,v_bg,vtol,trunc
-  integer,allocatable :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
+  INTEGER,ALLOCATABLE :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),node_all(:),slip(:),perm(:),    &
      onlst(:,:),frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),nnd_fe2fd(:),rsf_sta(:)
-  real(8),allocatable :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
+  REAL(8),ALLOCATABLE :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vvec_all(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:), &
      xfnd(:,:),ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),         &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
-     mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:)
-  real(8),allocatable,target :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
+     mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),rx_press(:)
+  REAL(8),ALLOCATABLE,TARGET :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
      flt_slip(:),tot_flt_slip(:),qs_flt_slip(:)
-  character(12) :: stype
-  character(256) :: output_file
-  logical :: poro,visco,fault,dyn,fail,dsp_dyn,crp,gf
+  CHARACTER(12) :: stype
+  CHARACTER(256) :: output_file
+  LOGICAL :: poro,visco,fault,dyn,fail,dsp_dyn,crp,gf
   Vec :: Vec_F,Vec_U,Vec_Um,Vec_Up,Vec_lambda,Vec_I,Vec_lambda_tot,            &
      Vec_U_dyn,Vec_Um_dyn,Vec_U_dyn_tot,Vec_Up0,Vec_Up_dyn,Vec_I_dyn,Vec_fp,   &
      Vec_qu,Vec_Uu,Vec_Ul,Vec_fl,Vec_flc,Vec_ql,Vec_SS,Vec_SH,Vec_f2s,Vec_dip, &
      Vec_nrm,Vec_lmnd,Vec_lambda_sta,Vec_lambda_sta0
-  Vec,pointer :: Vec_W(:),Vec_Wlm(:)
+  Vec,POINTER :: Vec_W(:),Vec_Wlm(:)
   Mat :: Mat_K,Mat_M,Mat_Minv,Mat_Gt,Mat_G,Mat_GMinvGt,Mat_Kc,Mat_K_dyn,Mat_H, &
      Mat_Ht
   KSP :: Krylov
   PC :: PreCon
   ! Local element/side/node variables
-  integer :: el,side,node
-  real(8) :: E,nu,dns,visc,expn,H,B,phi,Kf
-  integer,allocatable :: indx(:),indxp(:),enodes(:),indx_dyn(:)
-  real(8),allocatable :: k(:,:),m(:,:),f(:),ecoords(:,:),kc(:,:),Hs(:),        &
+  INTEGER :: el,side,node
+  REAL(8) :: E,nu,dns,visc,expn,H,B,phi,Kf
+  INTEGER,ALLOCATABLE :: indx(:),indxp(:),enodes(:),indx_dyn(:)
+  REAL(8),ALLOCATABLE :: k(:,:),m(:,:),f(:),ecoords(:,:),kc(:,:),Hs(:),        &
      k_dyn(:,:),uu_obs(:,:),tot_uu_obs(:,:),uu_dyn_obs(:,:),                   &
      tot_uu_dyn_obs(:,:),flt_ss(:,:),flt_p(:),uu_fd(:,:)
   ! Variables for parallel code
-  integer :: nprcs,rank,ierr
-  integer,allocatable :: epart(:),npart(:) ! Partitioning
-  integer,allocatable :: nmap(:),emap(:),nl2g(:,:),indxmap(:,:),               &
+  INTEGER :: nprcs,rank,ierr
+  INTEGER,ALLOCATABLE :: epart(:),npart(:) ! Partitioning
+  INTEGER,ALLOCATABLE :: nmap(:),emap(:),nl2g(:,:),indxmap(:,:),               &
      indxmap_u(:,:),FltMap(:,:),ol2g(:),gpl2g(:) ! L-G Mapping
   Vec :: Seq_U,Seq_U_dyn,Seq_fp,Seq_fl,Seq_flc,Seq_ql,Seq_qu,Seq_SS,Seq_SH,    &
      Seq_f2s,Seq_dip,Seq_nrm
   IS :: From,To,RI,From_u,To_u,RIu,From_p,To_p,RIl
   VecScatter :: Scatter,Scatter_dyn,Scatter_u,Scatter_q,Scatter_s2d
-  real(8),pointer :: pntr(:)
+  REAL(8),POINTER :: pntr(:)
 
-contains
+CONTAINS
 
-  ! Form local [K]
-  subroutine FormLocalK(el,k,indx,strng)
-    implicit none
-    integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn)
-    character(2) :: strng
+  ! Form local [K] - Includes Dirichlet Pressure
+  SUBROUTINE FormLocalK_DP(el,k,f,indx,strng)
+    IMPLICIT NONE
+    INTEGER :: el,indx(:)
+    REAL(8) :: k(:,:),estress(nip,cdmn),f(:)
+    CHARACTER(2) :: strng
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
-    if (visco) estress=stress(el,:,:)
-    if (dyn) then
+    IF (visco) estress=stress(el,:,:)
+    IF (dyn) THEN
        E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
-    else
+    ELSE
        E=mat(id(el),1); nu=mat(id(el),2)
-    end if
+    END IF
     visc=mat(id(el),3); expn=mat(id(el),4)
-    if ((.not. poro) .or. strng=="Ke") then
-       call FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
-    else
+    IF ((.NOT. poro) .OR. strng=="Ke") THEN
+       CALL FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
+    ELSE
        H=mat(id(el),6)
        B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
-       call FormElKp(ecoords,estress,E,nu,visc,expn,H,B,phi,Kf,1.0d0,scale,dt, &
+       CALL FormElKp(ecoords,estress,E,nu,visc,expn,H,B,phi,Kf,1.0d0,scale,dt, &
           k,strng)
-    end if
-    call AddWinklerFdn(el,k)
-    if (.not. dyn) call FixBCinLocalK(el,k)
-    if (dyn) then
-       call FormLocalIndx_dyn(enodes,indx)
-    else
-       call FormLocalIndx(enodes,indx)
-    end if
-  end subroutine FormLocalK
+    END IF
+    CALL AddWinklerFdn(el,k)
+    IF (.NOT. dyn) CALL FixBCinLocalK_DP(el,k,f)
+    IF (dyn) THEN
+       CALL FormLocalIndx_dyn(enodes,indx)
+    ELSE
+       CALL FormLocalIndx(enodes,indx)
+    END IF
+  END SUBROUTINE FormLocalK_DP
+
+  ! Form local [K]
+  SUBROUTINE FormLocalK(el,k,indx,strng)
+    IMPLICIT NONE
+    INTEGER :: el,indx(:)
+    REAL(8) :: k(:,:),estress(nip,cdmn)
+    CHARACTER(2) :: strng
+    enodes=nodes(el,:)
+    ecoords=coords(enodes,:)
+    IF (visco) estress=stress(el,:,:)
+    IF (dyn) THEN
+       E=mat(id(el),5+4*p+init+1); nu=mat(id(el),5+4*p+init+2)
+    ELSE
+       E=mat(id(el),1); nu=mat(id(el),2)
+    END IF
+    visc=mat(id(el),3); expn=mat(id(el),4)
+    IF ((.NOT. poro) .OR. strng=="Ke") THEN
+       CALL FormElK(ecoords,estress,E,nu,visc,expn,dt,k,strng)
+    ELSE
+       H=mat(id(el),6)
+       B=mat(id(el),7); phi=mat(id(el),8); Kf=mat(id(el),9)
+       CALL FormElKp(ecoords,estress,E,nu,visc,expn,H,B,phi,Kf,1.0d0,scale,dt, &
+          k,strng)
+    END IF
+    CALL AddWinklerFdn(el,k)
+    IF (.NOT. dyn) CALL FixBCinLocalK(el,k)
+    IF (dyn) THEN
+       CALL FormLocalIndx_dyn(enodes,indx)
+    ELSE
+       CALL FormLocalIndx(enodes,indx)
+    END IF
+  END SUBROUTINE FormLocalK
+
  
 ! Rescale local [Kv] for dt
-  subroutine RscKv(el,k,indx,dtmp)
-    implicit none
-    integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn),dtmp
+  SUBROUTINE RscKv(el,k,indx,dtmp)
+    IMPLICIT NONE
+    INTEGER :: el,indx(:)
+    REAL(8) :: k(:,:),estress(nip,cdmn),dtmp
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     estress=stress(el,:,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     visc=mat(id(el),3); expn=mat(id(el),4)
     H=mat(id(el),6)
-    call RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
-    call FormLocalIndx(enodes,indx) 
-  end subroutine RscKv
+    CALL RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
+    CALL FormLocalIndx(enodes,indx) 
+  END SUBROUTINE RscKv
 
   ! Rescale local [Kp] for dt
-  subroutine RscKp(el,k,indx,dtmp)
-    implicit none
-    integer :: el,indx(:)
-    real(8) :: k(:,:),estress(nip,cdmn),dtmp
-    character(2) :: strng
+  SUBROUTINE RscKp(el,k,indx,dtmp)
+    IMPLICIT NONE
+    INTEGER :: el,indx(:)
+    REAL(8) :: k(:,:),estress(nip,cdmn),dtmp
+    CHARACTER(2) :: strng
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
-    if (visco) estress=stress(el,:,:)
+    IF (visco) estress=stress(el,:,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     visc=mat(id(el),3); expn=mat(id(el),4)
     H=mat(id(el),6)
     strng="Kp"
-    if (visco) strng="Kv"
-    call RscElKp(ecoords,estress,E,nu,visc,expn,H,1.0d0,scale,dt,k,dtmp,strng)
-    call FormLocalIndx(enodes,indx)
-  end subroutine RscKp 
+    IF (visco) strng="Kv"
+    CALL RscElKp(ecoords,estress,E,nu,visc,expn,H,1.0d0,scale,dt,k,dtmp,strng)
+    CALL FormLocalIndx(enodes,indx)
+  END SUBROUTINE RscKp 
 
   ! Rescale [K] for new dt (poro and/or linear visco) 
-  subroutine Rscdt(fdt)
-    implicit none
+  SUBROUTINE Rscdt(fdt)
+    IMPLICIT NONE
 #include "petsc.h" 
-    integer :: i,ndof
-    real(8) :: fdt,dtmp
+    INTEGER :: i,ndof
+    REAL(8) :: fdt,dtmp
     dtmp=(fdt-f1)*dt
     ndof=eldof+eldofp
-    do i=1,nels
-       if (visco .and. .not. poro) then
-          call RscKv(i,k,indx,dtmp)
+    DO i=1,nels
+       IF (visco .AND. .NOT. poro) THEN
+          CALL RscKv(i,k,indx,dtmp)
           !call RscRHSv(i,f,indx,dtmp)
-       else 
-          call RscKp(i,k,indx,dtmp)
+       ELSE 
+          CALL RscKp(i,k,indx,dtmp)
           !call RscRHSp(i,f,indx,dtmp)
-       end if
+       END IF
        indx=indxmap(indx,2)
-       call MatSetValues(Mat_K,ndof,indx,ndof,indx,k,Add_Values,ierr)
+       CALL MatSetValues(Mat_K,ndof,indx,ndof,indx,k,Add_Values,ierr)
        !call VecSetValues(Vec_F,eldof,indx,f,Add_Values,ierr)
-    end do
-    call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
-    call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+    END DO
+    CALL MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+    CALL MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
     !call VecAssemblyBegin(Vec_F,ierr)
     !call VecAssemblyEnd(Vec_F,ierr)
     dt=fdt*dt
-  end subroutine Rscdt
+  END SUBROUTINE Rscdt
 
   ! Form local [M]
-  subroutine FormLocalM(el,m,indx)
-    implicit none
-    integer :: el,indx(:)
-    real(8) :: m(:,:)
+  SUBROUTINE FormLocalM(el,m,indx)
+    IMPLICIT NONE
+    INTEGER :: el,indx(:)
+    REAL(8) :: m(:,:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     dns=mat(id(el),5)
-    call FormElM(ecoords,dns,m)
-    call FormElIndx(enodes,indx)
-  end subroutine FormLocalM
+    CALL FormElM(ecoords,dns,m)
+    CALL FormElIndx(enodes,indx)
+  END SUBROUTINE FormLocalM
 
   ! Account for constraint eqns
-  subroutine ApplyConstraints
-    implicit none
+  SUBROUTINE ApplyConstraints
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: i,j,n,j1,j2,j3,j4
-    open(15,file="cnstrns.tmp",status='old')
+    INTEGER :: i,j,n,j1,j2,j3,j4
+    OPEN(15,file="cnstrns.tmp",status='old')
     j4=0
-    do i=1,nceqs
-       if (poro .and. mod(i,dmn+1)>0) j4=j4+1
-       read(15,*)n
-       do j=1,n
-          read(15,*)vvec,node
-          if (stype/="explicit") then
-             do j1=1,dmn+p
+    DO i=1,nceqs
+       IF (poro .AND. MOD(i,dmn+1)>0) j4=j4+1
+       READ(15,*)n
+       DO j=1,n
+          READ(15,*)vvec,node
+          IF (stype/="explicit") THEN
+             DO j1=1,dmn+p
                 j2=(dmn+p)*node-(dmn+p)+j1-1; j3=(dmn+p)*nnds+i-1
-                call MatSetValue(Mat_K,j2,j3,wt*vvec(j1),Add_Values,ierr)
-                call MatSetValue(Mat_K,j3,j2,wt*vvec(j1),Add_Values,ierr)
-             end do
-          end if
-          if ((stype=="explicit" .and. .not. gf).or. (fault .and.              &
-             i<=nceqs_ncf)) then
-             do j1=1,dmn
+                CALL MatSetValue(Mat_K,j2,j3,wt*vvec(j1),Add_Values,ierr)
+                CALL MatSetValue(Mat_K,j3,j2,wt*vvec(j1),Add_Values,ierr)
+             END DO
+          END IF
+          IF ((stype=="explicit" .AND. .NOT. gf).OR. (fault .AND.              &
+             i<=nceqs_ncf)) THEN
+             DO j1=1,dmn
                 j2=dmn*node-dmn+j1-1; j3=i-1
-                if (poro .and. mod(i,dmn+1)>0) then
-                   call MatSetValue(Mat_Gt,j2,j4-1,vvec(j1),Add_Values,ierr)
-                elseif (.not. poro) then
-                   call MatSetValue(Mat_Gt,j2,j3,vvec(j1),Add_Values,ierr)
-                end if
-             end do
-          end if
-       end do
-       if (stype/="explicit") then ! Constraint block diagonals have to be
+                IF (poro .AND. MOD(i,dmn+1)>0) THEN
+                   CALL MatSetValue(Mat_Gt,j2,j4-1,vvec(j1),Add_Values,ierr)
+                ELSEIF (.NOT. poro) THEN
+                   CALL MatSetValue(Mat_Gt,j2,j3,vvec(j1),Add_Values,ierr)
+                END IF
+             END DO
+          END IF
+       END DO
+       IF (stype/="explicit") THEN ! Constraint block diagonals have to be
           j1=(dmn+p)*nnds+i-1      ! explicitly set to zero (PETSc req)
-          call MatSetValue(Mat_K,j1,j1,f0,Add_Values,ierr)
-       end if
-       read(15,*)cval(i,:)
-    end do
-    close(15)
-  end subroutine ApplyConstraints
+          CALL MatSetValue(Mat_K,j1,j1,f0,Add_Values,ierr)
+       END IF
+       READ(15,*)cval(i,:)
+    END DO
+    CLOSE(15)
+  END SUBROUTINE ApplyConstraints
 
   ! Create full Mat_Gt for dynamic constraints
-  subroutine GetMat_Gt
-    implicit none
-    integer :: j,j1,j2,j3,j4,j5
+  SUBROUTINE GetMat_Gt
+    IMPLICIT NONE
+    INTEGER :: j,j1,j2,j3,j4,j5
 #include "petsc.h"
-    if (rank==0) then
-       do j=1,nfnd
-          do j1=1,dmn
+    IF (rank==0) THEN
+       DO j=1,nfnd
+          DO j1=1,dmn
              j3=(j-1)*dmn+j1-1
-             do j2=1,2
+             DO j2=1,2
                 vvec=vvec_all(2*j3+j2,:)
                 node=node_all(2*j3+j2)
-                do j4=1,dmn
+                DO j4=1,dmn
                    j5=dmn*node-dmn+j4-1
-                   call MatSetValue(Mat_Gt,j5,j3+nceqs_ncf*dmn/(dmn+p),vvec(j4)&
+                   CALL MatSetValue(Mat_Gt,j5,j3+nceqs_ncf*dmn/(dmn+p),vvec(j4)&
                       ,Add_Values,ierr)
-                end do
-             end do
-          end do
-       end do
-    end if 
-  end subroutine GetMat_Gt
+                END DO
+             END DO
+          END DO
+       END DO
+    END IF 
+  END SUBROUTINE GetMat_Gt
 
   ! Scatter LMs to solution space
-  subroutine GetVec_flambda
-    implicit none
+  SUBROUTINE GetVec_flambda
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j3,j4,u1,u2,workpos(dmn),workneg(dmn),row
-    real(8) :: lm(dmn),vecfl(dmn),lmq,q
-    call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
-    do j=1,nfnd
+    INTEGER :: j,j1,j3,j4,u1,u2,workpos(dmn),workneg(dmn),row
+    REAL(8) :: lm(dmn),vecfl(dmn),lmq,q
+    CALL VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
+    DO j=1,nfnd
        lm=f0; vecfl=f0; lmq=f0; q=f0
-       do j1=1,dmn
+       DO j1=1,dmn
           workpos(j1)=dmn*node_pos(j)-dmn+j1-1
           workneg(j1)=dmn*node_neg(j)-dmn+j1-1
-          if (poro) then
-             row=dmn*(j-1)+sum(perm(1:j-1))+j1-1
-          else
+          IF (poro) THEN
+             row=dmn*(j-1)+SUM(perm(1:j-1))+j1-1
+          ELSE
              row=dmn*(j-1)+j1-1
-          end if
-          if (row>=u1 .and. row<u2) then
-             call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
-          end if
-       end do
-       call MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
+          END IF
+          IF (row>=u1 .AND. row<u2) THEN
+             CALL VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
+          END IF
+       END DO
+       CALL MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
           ierr)
-       if (poro .and. perm(j)==1) then
+       IF (poro .AND. perm(j)==1) THEN
            row=row+1
-           if (row>=u1 .and. row<u2) then
-              call VecGetValues(Vec_Ul,1,row,lmq,ierr)
-           end if
-           call MPI_Reduce(lmq,q,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,   &
+           IF (row>=u1 .AND. row<u2) THEN
+              CALL VecGetValues(Vec_Ul,1,row,lmq,ierr)
+           END IF
+           CALL MPI_Reduce(lmq,q,1,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,   &
               ierr)
-       end if
-       if (rank==nprcs-1) then 
-          call VecSetValues(Vec_fl,dmn,workpos,wt*vecfl,Insert_Values,ierr)
-          call VecSetValues(Vec_fl,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
-          if (poro .and. perm(j)==1) then
+       END IF
+       IF (rank==nprcs-1) THEN 
+          CALL VecSetValues(Vec_fl,dmn,workpos,wt*vecfl,Insert_Values,ierr)
+          CALL VecSetValues(Vec_fl,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
+          IF (poro .AND. perm(j)==1) THEN
              j3=node_pos(j)-1
              j4=node_neg(j)-1
-             call VecSetValue(Vec_ql,j3,wt*q,Insert_Values,ierr)
-             call VecSetValue(Vec_ql,j4,-wt*q,Insert_Values,ierr)
-          end if
-       end if
-    end do
-    call VecAssemblyBegin(Vec_fl,ierr)
-    call VecAssemblyEnd(Vec_fl,ierr)
-    if (poro) then
-       call VecAssemblyBegin(Vec_ql,ierr)
-       call VecAssemblyEnd(Vec_ql,ierr)
-    end if
-  end subroutine GetVec_flambda
+             CALL VecSetValue(Vec_ql,j3,wt*q,Insert_Values,ierr)
+             CALL VecSetValue(Vec_ql,j4,-wt*q,Insert_Values,ierr)
+          END IF
+       END IF
+    END DO
+    CALL VecAssemblyBegin(Vec_fl,ierr)
+    CALL VecAssemblyEnd(Vec_fl,ierr)
+    IF (poro) THEN
+       CALL VecAssemblyBegin(Vec_ql,ierr)
+       CALL VecAssemblyEnd(Vec_ql,ierr)
+    END IF
+  END SUBROUTINE GetVec_flambda
 
   ! Extract the LM in fault's strike, dip and normal directions
-  subroutine GetVec_fcoulomb
-    implicit none
+  SUBROUTINE GetVec_fcoulomb
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,u1,u2,workpos(dmn),workneg(dmn),row
-    real(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1)
-    call VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
-    do j=1,nfnd
+    INTEGER :: j,j1,u1,u2,workpos(dmn),workneg(dmn),row
+    REAL(8) :: lm(dmn),vecfl(dmn),mattmp(dmn,dmn),vectmp(dmn,1)
+    CALL VecGetOwnershipRange(Vec_Ul,u1,u2,ierr)
+    DO j=1,nfnd
        lm=f0; vecfl=f0
-       do j1=1,dmn
+       DO j1=1,dmn
           workpos(j1)=dmn*node_pos(j)-dmn+j1-1
           workneg(j1)=dmn*node_neg(j)-dmn+j1-1
-          if (poro) then
-             row=dmn*(j-1)+sum(perm(1:j-1))+j1-1
-          else
+          IF (poro) THEN
+             row=dmn*(j-1)+SUM(perm(1:j-1))+j1-1
+          ELSE
              row=dmn*(j-1)+j1-1
-          end if
-          if (row>=u1 .and. row<u2) then
-             call VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
-          end if
-       end do
-       call MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
+          END IF
+          IF (row>=u1 .AND. row<u2) THEN
+             CALL VecGetValues(Vec_Ul,1,row,lm(j1),ierr)
+          END IF
+       END DO
+       CALL MPI_Reduce(lm,vecfl,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,  &
           ierr)
-       if (rank==nprcs-1) then
-          vectmp=reshape(vecfl,(/dmn,1/))
-          mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
-          vectmp=matmul(mattmp,vectmp)
+       IF (rank==nprcs-1) THEN
+          vectmp=RESHAPE(vecfl,(/dmn,1/))
+          mattmp=TRANSPOSE(RESHAPE(vecf(j,:),(/dmn,dmn/)))
+          vectmp=MATMUL(mattmp,vectmp)
           vecfl(:)=vectmp(:,1)
-          call VecSetValues(Vec_flc,dmn,workpos,wt*vecfl,Insert_Values,ierr)
-          call VecSetValues(Vec_flc,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
-       end if
-    end do
-    call VecAssemblyBegin(Vec_flc,ierr)
-    call VecAssemblyEnd(Vec_flc,ierr)
-  end subroutine GetVec_fcoulomb
+          CALL VecSetValues(Vec_flc,dmn,workpos,wt*vecfl,Insert_Values,ierr)
+          CALL VecSetValues(Vec_flc,dmn,workneg,-wt*vecfl,Insert_Values,ierr)
+       END IF
+    END DO
+    CALL VecAssemblyBegin(Vec_flc,ierr)
+    CALL VecAssemblyEnd(Vec_flc,ierr)
+  END SUBROUTINE GetVec_fcoulomb
 
   ! Pass pseudo velocity to dynamic model
-  subroutine Rsfv2dyn
-    implicit none
+  SUBROUTINE Rsfv2dyn
+    IMPLICIT NONE
 #include "petsc.h"
-    integer:: j,j1,j2,j3,rw_loc(dmn)
-    real(8) :: vec(dmn),flt_qs(dmn)
-    real(8),target :: flt_ndf(n_lmnd*dmn)
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
+    INTEGER:: j,j1,j2,j3,rw_loc(dmn)
+    REAL(8) :: vec(dmn),flt_qs(dmn)
+    REAL(8),TARGET :: flt_ndf(n_lmnd*dmn)
+    CALL VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    do j=1,nfnd_loc
+    CALL VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    DO j=1,nfnd_loc
        j1=FltMap(j,1); j3=FltMap(j,2)
        rw_loc=(/((j1-1)*dmn+j2,j2=1,dmn)/)
-       select case(dmn)
-       case(2)
+       SELECT CASE(dmn)
+       CASE(2)
           vec(1)=rsfv(j3)
           vec(2)=f0 ! Zero normal velocity
-       case (3)
+       CASE (3)
           flt_qs=flt_ndf(rw_loc)+st_init(j3,:)
-          vec(1)=rsfv(j3)*flt_qs(1)/sqrt(flt_qs(1)**2+flt_qs(2)**2)
-          vec(2)=rsfv(j3)*flt_qs(2)/sqrt(flt_qs(1)**2+flt_qs(2)**2)
+          vec(1)=rsfv(j3)*flt_qs(1)/SQRT(flt_qs(1)**2+flt_qs(2)**2)
+          vec(2)=rsfv(j3)*flt_qs(2)/SQRT(flt_qs(1)**2+flt_qs(2)**2)
           vec(3)=f0 ! Zero normal velocity
-       end select
+       END SELECT
        rw_loc=lmnd0*dmn+rw_loc-1
-       call VecSetValues(Vec_I_dyn,dmn,rw_loc,vec*dt_dyn,Insert_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_I_dyn,ierr) 
-    call VecAssemblyEnd(Vec_I_dyn,ierr)
-  end subroutine Rsfv2Dyn
+       CALL VecSetValues(Vec_I_dyn,dmn,rw_loc,vec*dt_dyn,Insert_Values,ierr)
+    END DO
+    CALL VecAssemblyBegin(Vec_I_dyn,ierr) 
+    CALL VecAssemblyEnd(Vec_I_dyn,ierr)
+  END SUBROUTINE Rsfv2Dyn
 
   ! Force to stress ratio and normal dip vector of the fault nodes
-  subroutine GetVec_f2s
-    implicit none
+  SUBROUTINE GetVec_f2s
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j2,j3,workpos(dmn),workneg(dmn)
-    real(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r(dmn),dip(dmn),nrm(dmn),      &
+    INTEGER :: j,j1,j2,j3,workpos(dmn),workneg(dmn)
+    REAL(8) :: vecfl(dmn),vecss(dmn),vecsh(dmn),r(dmn),dip(dmn),nrm(dmn),      &
        matrot(dmn,dmn),matst(dmn,dmn),st(dmn,dmn),vec(dmn)
-    call VecGetOwnershipRange(Vec_flc,j2,j3,ierr)
-    do j=1,nfnd
-       matrot=reshape(vecf(j,:),(/dmn,dmn/))
+    CALL VecGetOwnershipRange(Vec_flc,j2,j3,ierr)
+    DO j=1,nfnd
+       matrot=RESHAPE(vecf(j,:),(/dmn,dmn/))
        vecfl=f0; vecss=f0; vecsh=f0
-       do j1=1,dmn
+       DO j1=1,dmn
           workpos(j1)=dmn*node_pos(j)-dmn+j1-1
-          if (workpos(j1)>=j2 .and. workpos(j1)<j3) then
-             call VecGetValues(Vec_flc,1,workpos(j1),vecfl(j1),ierr)
-             call VecGetValues(Vec_SS,1,workpos(j1),vecss(j1),ierr)
-             call VecGetValues(Vec_SH,1,workpos(j1),vecsh(j1),ierr)
-          end if
-       end do
-       call MPI_Reduce(vecfl,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+          IF (workpos(j1)>=j2 .AND. workpos(j1)<j3) THEN
+             CALL VecGetValues(Vec_flc,1,workpos(j1),vecfl(j1),ierr)
+             CALL VecGetValues(Vec_SS,1,workpos(j1),vecss(j1),ierr)
+             CALL VecGetValues(Vec_SH,1,workpos(j1),vecsh(j1),ierr)
+          END IF
+       END DO
+       CALL MPI_Reduce(vecfl,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecfl=vec
-       call MPI_Reduce(vecss,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+       CALL MPI_Reduce(vecss,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecss=vec
-       call MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+       CALL MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecsh=vec
-       if (rank==nprcs-1) then
-          select case(dmn)
-          case(2)
+       IF (rank==nprcs-1) THEN
+          SELECT CASE(dmn)
+          CASE(2)
              st(1,1)=vecss(1); st(2,2)=vecss(2)
              st(1,2)=vecsh(1); st(2,1)=vecsh(2)
              dip(:)=matrot(:,1)
              nrm(:)=matrot(:,2)
-          case(3)
+          CASE(3)
              st(1,1)=vecss(1); st(2,2)=vecss(2); st(3,3)=vecss(3)
              st(1,2)=vecsh(1); st(2,3)=vecsh(2); st(1,3)=vecsh(3)
              st(2,1)=vecsh(1); st(3,2)=vecsh(2); st(3,1)=vecsh(3)
              dip(:)=matrot(:,2)
              nrm(:)=matrot(:,3)
-          end select
-          matst=matmul(matmul(transpose(matrot),st),matrot)
+          END SELECT
+          matst=MATMUL(MATMUL(TRANSPOSE(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=abs(vecss(dmn)/vecfl(dmn))
+          IF (ABS(vecfl(dmn))>f0) r=ABS(vecss(dmn)/vecfl(dmn))
           !if (rank==nprcs-1) then
-          call VecSetValues(Vec_f2s,dmn,workpos,r,Insert_Values,ierr)
-          call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
-          call VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
+          CALL VecSetValues(Vec_f2s,dmn,workpos,r,Insert_Values,ierr)
+          CALL VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
+          CALL VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
           !end if
-       end if
-       matrot=reshape(vecf(j,:),(/dmn,dmn/))
+       END IF
+       matrot=RESHAPE(vecf(j,:),(/dmn,dmn/))
        vecfl=f0; vecss=f0; vecsh=f0
-       do j1=1,dmn
+       DO j1=1,dmn
           workneg(j1)=dmn*node_neg(j)-dmn+j1-1
-          if (workneg(j1)>=j2 .and. workneg(j1)<j3) then
-             call VecGetValues(Vec_flc,1,workneg(j1),vecfl(j1),ierr)
-             call VecGetValues(Vec_SS,1,workneg(j1),vecss(j1),ierr)
-             call VecGetValues(Vec_SH,1,workneg(j1),vecsh(j1),ierr)
-          end if
-       end do
-       call MPI_Reduce(vecfl,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+          IF (workneg(j1)>=j2 .AND. workneg(j1)<j3) THEN
+             CALL VecGetValues(Vec_flc,1,workneg(j1),vecfl(j1),ierr)
+             CALL VecGetValues(Vec_SS,1,workneg(j1),vecss(j1),ierr)
+             CALL VecGetValues(Vec_SH,1,workneg(j1),vecsh(j1),ierr)
+          END IF
+       END DO
+       CALL MPI_Reduce(vecfl,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecfl=vec
-       call MPI_Reduce(vecss,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+       CALL MPI_Reduce(vecss,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecss=vec
-       call MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+       CALL MPI_Reduce(vecsh,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
        vecsh=vec
-       if (rank==nprcs-1) then
-          select case(dmn)
-          case(2)
+       IF (rank==nprcs-1) THEN
+          SELECT CASE(dmn)
+          CASE(2)
              st(1,1)=vecss(1); st(2,2)=vecss(2)
              st(1,2)=vecsh(1); st(2,1)=vecsh(2)
              dip(:)=matrot(:,1)
              nrm(:)=matrot(:,2)
-          case(3)
+          CASE(3)
              st(1,1)=vecss(1); st(2,2)=vecss(2); st(3,3)=vecss(3)
              st(1,2)=vecsh(1); st(2,3)=vecsh(2); st(1,3)=vecsh(3)
              st(2,1)=vecsh(1); st(3,2)=vecsh(2); st(3,1)=vecsh(3)
              dip(:)=matrot(:,2)
              nrm(:)=matrot(:,3)
-          end select
-          matst=matmul(matmul(transpose(matrot),st),matrot)
+          END SELECT
+          matst=MATMUL(MATMUL(TRANSPOSE(matrot),st),matrot)
           vecss(dmn)=matst(dmn,dmn)
-          if (abs(vecfl(dmn))>f0) r=(r+abs(vecss(dmn)/vecfl(dmn)))/f2
+          IF (ABS(vecfl(dmn))>f0) r=(r+ABS(vecss(dmn)/vecfl(dmn)))/f2
           ! Convert prestress to nodal force
-          if (r(dmn)>f0) then
+          IF (r(dmn)>f0) THEN
              st_init(j,:)=st_init(j,:)/r
              coh(j)=coh(j)/r(1)
-             if (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
-          end if
-          call VecSetValues(Vec_f2s,dmn,workneg,-r,Insert_Values,ierr)
-          call VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
-          call VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
-       end if
-    end do
-    call VecAssemblyBegin(Vec_f2s,ierr)
-    call VecAssemblyEnd(Vec_f2s,ierr)
-    call VecAssemblyBegin(Vec_dip,ierr)
-    call VecAssemblyEnd(Vec_dip,ierr)
-    call VecAssemblyBegin(Vec_nrm,ierr)
-    call VecAssemblyEnd(Vec_nrm,ierr)
-    call MPI_Bcast(st_init,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-    call MPI_Bcast(coh,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-    if (rsf==1) call MPI_Bcast(rsfdtau0,nfnd,MPI_Real8,nprcs-1,                &
+             IF (rsf==1) rsfdtau0(j)=rsfdtau0(j)/r(1)
+          END IF
+          CALL VecSetValues(Vec_f2s,dmn,workneg,-r,Insert_Values,ierr)
+          CALL VecSetValues(Vec_dip,dmn,workneg,dip,Insert_Values,ierr)
+          CALL VecSetValues(Vec_nrm,dmn,workneg,nrm,Insert_Values,ierr)
+       END IF
+    END DO
+    CALL VecAssemblyBegin(Vec_f2s,ierr)
+    CALL VecAssemblyEnd(Vec_f2s,ierr)
+    CALL VecAssemblyBegin(Vec_dip,ierr)
+    CALL VecAssemblyEnd(Vec_dip,ierr)
+    CALL VecAssemblyBegin(Vec_nrm,ierr)
+    CALL VecAssemblyEnd(Vec_nrm,ierr)
+    CALL MPI_Bcast(st_init,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
+    CALL MPI_Bcast(coh,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
+    IF (rsf==1) CALL MPI_Bcast(rsfdtau0,nfnd,MPI_Real8,nprcs-1,                &
        MPI_Comm_World,ierr)
-  end subroutine GetVec_f2s
+  END SUBROUTINE GetVec_f2s
 
   ! Fault dip and normal vectors
-  subroutine GetVec_ft
-    implicit none
+  SUBROUTINE GetVec_ft
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,workpos(dmn)
-    real(8):: dip(dmn),nrm(dmn),matrot(dmn,dmn)
-    do j=1,nfnd
-       do j1=1,dmn
+    INTEGER :: j,j1,workpos(dmn)
+    REAL(8):: dip(dmn),nrm(dmn),matrot(dmn,dmn)
+    DO j=1,nfnd
+       DO j1=1,dmn
           workpos(j1)=dmn*node_pos(j)-dmn+j1-1
-       end do
-       matrot=reshape(vecf(j,:),(/dmn,dmn/))
-       select case(dmn)
-       case(2)
+       END DO
+       matrot=RESHAPE(vecf(j,:),(/dmn,dmn/))
+       SELECT CASE(dmn)
+       CASE(2)
           dip(:)=matrot(:,1)
           nrm(:)=matrot(:,2)
-       case(3)
+       CASE(3)
           dip(:)=matrot(:,2)
           nrm(:)=matrot(:,3)
-       end select
-       if (rank==nprcs-1) then
-          call VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
-          call VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
-       end if
-    end do
-    call VecAssemblyBegin(Vec_dip,ierr)
-    call VecAssemblyEnd(Vec_dip,ierr)
-    call VecAssemblyBegin(Vec_nrm,ierr)
-    call VecAssemblyEnd(Vec_nrm,ierr)
-  end subroutine GetVec_ft
+       END SELECT
+       IF (rank==nprcs-1) THEN
+          CALL VecSetValues(Vec_dip,dmn,workpos,dip,Insert_Values,ierr)
+          CALL VecSetValues(Vec_nrm,dmn,workpos,nrm,Insert_Values,ierr)
+       END IF
+    END DO
+    CALL VecAssemblyBegin(Vec_dip,ierr)
+    CALL VecAssemblyEnd(Vec_dip,ierr)
+    CALL VecAssemblyBegin(Vec_nrm,ierr)
+    CALL VecAssemblyEnd(Vec_nrm,ierr)
+  END SUBROUTINE GetVec_ft
 
   ! RSF pseudo time update 
-  subroutine RSF_QS_update(flt_ndf0,flt_ndf1,slip_loc,trunc)
-    implicit none
+  SUBROUTINE RSF_QS_update(flt_ndf0,flt_ndf1,slip_loc,trunc)
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j2,j3,j4,rw_loc(dmn),nqs,cut_glb,cut,slip_loc(nfnd),ntol,nslip
-    real(8) :: theta,mu,a,b0,b,V0,L,dd,v_qs,dtpsd,flt_qs0(dmn),flt_qs1(dmn),   &
+    INTEGER :: j,j1,j2,j3,j4,rw_loc(dmn),nqs,cut_glb,cut,slip_loc(nfnd),ntol,nslip
+    REAL(8) :: theta,mu,a,b0,b,V0,L,dd,v_qs,dtpsd,flt_qs0(dmn),flt_qs1(dmn),   &
        flt_qs(dmn),trunc !,vmax
-    real(8),target :: flt_ndf0(n_lmnd*dmn),flt_ndf1(n_lmnd*dmn)
-    real(8),allocatable :: rsfstate(:,:,:)
-    integer,save :: k=0,rsflog=0
+    REAL(8),TARGET :: flt_ndf0(n_lmnd*dmn),flt_ndf1(n_lmnd*dmn)
+    REAL(8),ALLOCATABLE :: rsfstate(:,:,:)
+    INTEGER,SAVE :: k=0,rsflog=0
     dtpsd=f1
-    nqs=int((dt+trunc)/dtpsd)
-    allocate(rsfstate(nqs,nfnd_loc,3))
+    nqs=INT((dt+trunc)/dtpsd)
+    ALLOCATE(rsfstate(nqs,nfnd_loc,3))
     rsfstate=f0; slip_loc=0
     cut=nqs
     vtol=1.D-3 ! Velocity threshold 1D-5
     !vmax=1.D-2 ! Maximum velocity 1D-4
     ntol=10 ! Slip node threshold 10 for 5 m spacing
-    do j4=1,nqs
-       do j=1,nfnd_loc
+    DO j4=1,nqs
+       DO j=1,nfnd_loc
           j1=FltMap(j,1); j3=FltMap(j,2)
           ! RSF parameters
           a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
-          if (j4==1) then
+          IF (j4==1) THEN
              theta=rsftheta(j3)
-          else
+          ELSE
              theta=rsfstate(j4-1,j,3)
-          end if
+          END IF
           rw_loc=(/((j1-1)*dmn+j2,j2=1,dmn)/)
           flt_qs0=flt_ndf0(rw_loc)+st_init(j3,:)
           flt_qs1=flt_ndf1(rw_loc)+st_init(j3,:)
           ! Match shear with friction by updating v_qs
-          flt_qs=flt_qs0+(flt_qs1-flt_qs0)*dble(j4)/dble(nqs)
-          mu=sqrt(sum(flt_qs(:dmn-1)*flt_qs(:dmn-1)))/abs(flt_qs(dmn))
+          flt_qs=flt_qs0+(flt_qs1-flt_qs0)*DBLE(j4)/DBLE(nqs)
+          mu=SQRT(SUM(flt_qs(:dmn-1)*flt_qs(:dmn-1)))/ABS(flt_qs(dmn))
           !v_qs=sinh(mu/a)*V0*f2/exp((b0+b*log(V0*theta/L))/a)
-          v_qs=min(vtol,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*theta/L))/a))
+          v_qs=MIN(vtol,SINH(mu/a)*V0*f2/EXP((b0+b*LOG(V0*theta/L))/a))
           dd=v_qs*dtpsd
           theta=dtpsd/(f1+dd/f2/L)+theta*(f1-dd/L/f2)/(f1+dd/L/f2)
           rsfstate(j4,j,:)=(/v_qs,mu,theta/)
-       end do
-       call MPI_AllReduce(size(pack(rsfstate(j4,:,1),rsfstate(j4,:,1)>=vtol)),nslip,1,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
+       END DO
+       CALL MPI_AllReduce(SIZE(PACK(rsfstate(j4,:,1),rsfstate(j4,:,1)>=vtol)),nslip,1,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
        !if (maxval(rsfstate(j4,:,1))>vtol) then
-       if (nslip>=ntol) then ! At least ntol fault nodes nucleate
+       IF (nslip>=ntol) THEN ! At least ntol fault nodes nucleate
           cut=j4
-          exit
-       end if
-    end do
-    call MPI_AllReduce(cut,cut_glb,1,MPI_Integer,MPI_Min,MPI_Comm_World,ierr) 
-    do j=1,nfnd_loc
+          EXIT
+       END IF
+    END DO
+    CALL MPI_AllReduce(cut,cut_glb,1,MPI_Integer,MPI_Min,MPI_Comm_World,ierr) 
+    DO j=1,nfnd_loc
        j3=FltMap(j,2)
        rsftheta(j3)=rsfstate(cut_glb,j,3)
        mu_hyb(j3)=rsfstate(cut_glb,j,2)
        rsfv(j3)=rsfstate(cut_glb,j,1)
-       if (rsfv(j3)>=vtol .and. nslip>=ntol) slip_loc(j3)=1 ! .and. nslip>ntol
-    end do 
-    if (cut_glb<nqs) then 
-       call VecScale(Vec_lambda_sta,dble(cut_glb)/dble(nqs),ierr)
-       call VecAXPY(Vec_lambda_sta,f1-dble(cut_glb)/dble(nqs),Vec_lambda_sta0, &
+       IF (rsfv(j3)>=vtol .AND. nslip>=ntol) slip_loc(j3)=1 ! .and. nslip>ntol
+    END DO 
+    IF (cut_glb<nqs) THEN 
+       CALL VecScale(Vec_lambda_sta,DBLE(cut_glb)/DBLE(nqs),ierr)
+       CALL VecAXPY(Vec_lambda_sta,f1-DBLE(cut_glb)/DBLE(nqs),Vec_lambda_sta0, &
           ierr)
-       trunc=dt*(f1-dble(cut_glb)/dble(nqs))
-    else
+       trunc=dt*(f1-DBLE(cut_glb)/DBLE(nqs))
+    ELSE
        trunc=f0
-    end if
-    do j4=1,cut_glb
-       if (mod(k,200)==0) then
-          call WriteOutput_rsf(rsfstate(j4,:,:2))
+    END IF
+    DO j4=1,cut_glb
+       IF (MOD(k,200)==0) THEN
+          CALL WriteOutput_rsf(rsfstate(j4,:,:2))
           rsflog=rsflog+1
-       end if
+       END IF
        k=k+1
-    end do
-    if (rank==0) call WriteOutput_log_rsf(rsflog,dtpsd*dble(200))
-  end subroutine RSF_QS_update
+    END DO
+    IF (rank==0) CALL WriteOutput_log_rsf(rsflog,dtpsd*DBLE(200))
+  END SUBROUTINE RSF_QS_update
 
   ! Write rate-state pseudo velocity and friction
-  subroutine WriteOutput_rsf(state)
-    implicit none
-    integer :: j,j3
-    integer,save :: k=0
-    real(8) :: state(nfnd_loc,2)
-    character(256) :: name,name0,name1
-    character(64) :: fmt
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    if (nfnd_loc>0) then 
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_rsf.txt"
+  SUBROUTINE WriteOutput_rsf(state)
+    IMPLICIT NONE
+    INTEGER :: j,j3
+    INTEGER,SAVE :: k=0
+    REAL(8) :: state(nfnd_loc,2)
+    CHARACTER(256) :: name,name0,name1
+    CHARACTER(64) :: fmt
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    IF (nfnd_loc>0) THEN 
+       WRITE(name,'(A,A,A,I0.6,A)')TRIM(name0),TRIM(name1),"_",rank,"_rsf.txt"
        fmt="(2(ES11.2E3,X))"
-       if (k==0) then
-          open(10,file=adjustl(name),status='replace')
-          write(10,'(I0)')nfnd_loc
-          do j=1,nfnd_loc
+       IF (k==0) THEN
+          OPEN(10,file=ADJUSTL(name),status='replace')
+          WRITE(10,'(I0)')nfnd_loc
+          DO j=1,nfnd_loc
              j3=FltMap(j,2)
-             select case(dmn)
-                case(2); write(10,'(2(F0.3,X),I0)')xfnd(j3,:),j3
-                case(3); write(10,'(3(F0.3,X),I0)')xfnd(j3,:),j3
-             end select
-          end do
-       else
-          open(10,file=adjustl(name),status='old',position='append',action=    &
+             SELECT CASE(dmn)
+                CASE(2); WRITE(10,'(2(F0.3,X),I0)')xfnd(j3,:),j3
+                CASE(3); WRITE(10,'(3(F0.3,X),I0)')xfnd(j3,:),j3
+             END SELECT
+          END DO
+       ELSE
+          OPEN(10,file=ADJUSTL(name),status='old',position='append',action=    &
              'write')
-       end if
-       do j=1,nfnd_loc
-          write(10,fmt)state(j,:)
-       end do
-       close(10); k=k+1
-    end if
-  end subroutine WriteOutput_rsf
+       END IF
+       DO j=1,nfnd_loc
+          WRITE(10,fmt)state(j,:)
+       END DO
+       CLOSE(10); k=k+1
+    END IF
+  END SUBROUTINE WriteOutput_rsf
 
-  subroutine WriteOutput_log_rsf(n,dt)
-    implicit none
-    integer :: n
-    integer,save :: k=0
-    real(8) :: dt
-    character(256) :: name,name0,name1
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_rsf.log"
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       write(10,'(F0.3)')dt
-    else 
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    write(10,'(I0)')n
-    close(10); k=k+1
-  end subroutine WriteOutput_log_rsf
+  SUBROUTINE WriteOutput_log_rsf(n,dt)
+    IMPLICIT NONE
+    INTEGER :: n
+    INTEGER,SAVE :: k=0
+    REAL(8) :: dt
+    CHARACTER(256) :: name,name0,name1
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,A,A,I0.6,A)')TRIM(name0),TRIM(name1),"_rsf.log"
+    IF (k==0) THEN
+       OPEN(10,file=ADJUSTL(name),status='replace')
+       WRITE(10,'(F0.3)')dt
+    ELSE 
+       OPEN(10,file=ADJUSTL(name),status='old',position='append',action='write')
+    END IF
+    WRITE(10,'(I0)')n
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_log_rsf
 
   ! Update slip from the static model (from Vec_lambda_sta)
-  subroutine GetSlip_sta 
-    implicit none
+  SUBROUTINE GetSlip_sta 
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j2,j3,slip_loc(nfnd),rw_loc(dmn)
-    real(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,mattmp(dmn,dmn),d,fcoh, &
+    INTEGER :: j,j1,j2,j3,slip_loc(nfnd),rw_loc(dmn)
+    REAL(8) :: mu,theta102,flt_qs(dmn),fsh,fnrm,rsftau,mattmp(dmn,dmn),d,fcoh, &
        a,b0,b,V0,L
-    real(8),target :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn)
-    integer,save :: k=0
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
+    REAL(8),TARGET :: flt_ndf(n_lmnd*dmn),flt_ndf0(n_lmnd*dmn)
+    INTEGER,SAVE :: k=0
+    CALL VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_ndf=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    if (rsf==1 .and. k>0) then
-        call VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
+    CALL VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    IF (rsf==1 .AND. k>0) THEN
+        CALL VecGetArrayF90(Vec_lambda_sta0,pntr,ierr)
         flt_ndf0=pntr
-        call VecRestoreArrayF90(Vec_lambda_sta0,pntr,ierr)
-        call RSF_QS_update(flt_ndf0,flt_ndf,slip_loc,trunc)
+        CALL VecRestoreArrayF90(Vec_lambda_sta0,pntr,ierr)
+        CALL RSF_QS_update(flt_ndf0,flt_ndf,slip_loc,trunc)
         go to 250
-    end if
-    if (rsf==1 .and. k==0) rsfv=v_bg
+    END IF
+    IF (rsf==1 .AND. k==0) rsfv=v_bg
     slip_loc=0
     rsftau=f0 
-    do j1=1,nfnd_loc
+    DO j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        flt_qs=flt_ndf(rw_loc)+st_init(j3,:)
-       if (rsf==1) then  
-          if (k==0) then
+       IF (rsf==1) THEN  
+          IF (k==0) THEN
              ! RSF parameters
              a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
-             mu_cap(j3)=a*asinh(v_bg/V0/f2*exp((b0+b*log(V0*rsftheta(j3)/L))/a))
-             mu=min(mu_cap(j3),sqrt(sum(flt_qs(:dmn-1)*flt_qs(:dmn-1)))        &
-                /abs(flt_qs(dmn)))
+             mu_cap(j3)=a*asinh(v_bg/V0/f2*EXP((b0+b*LOG(V0*rsftheta(j3)/L))/a))
+             mu=MIN(mu_cap(j3),SQRT(SUM(flt_qs(:dmn-1)*flt_qs(:dmn-1)))        &
+                /ABS(flt_qs(dmn)))
              mu_hyb(j3)=mu
              theta102=rsftheta(j3)
-             rsftheta(j3)=L/V0*exp((a*log(f2*sinh(mu/a))-b0-a*log(v_bg         &
+             rsftheta(j3)=L/V0*EXP((a*LOG(f2*SINH(mu/a))-b0-a*LOG(v_bg         &
                 /V0))/b)
              ! Only for SCEC102
              mu=mu_cap(j3)
              rsftheta(j3)=theta102
-             call GetExSt(xfnd(j3,:),t_abs,rsfdtau0(j3),rsftau)
-          else
+             CALL GetExSt(xfnd(j3,:),t_abs,rsfdtau0(j3),rsftau)
+          ELSE
              mu=mu_hyb(j3)
-          end if
-       else ! Slip weakening
+          END IF
+       ELSE ! Slip weakening
           mu=fc(j3)
-       end if
+       END IF
        flt_qs(1)=flt_qs(1)+rsftau
-       select case(dmn)
-       case(2)
-          fsh=abs(flt_qs(1))
+       SELECT CASE(dmn)
+       CASE(2)
+          fsh=ABS(flt_qs(1))
           fnrm=flt_qs(2)
-       case(3)
-          fsh=sqrt(flt_qs(1)**2+flt_qs(2)**2)
+       CASE(3)
+          fsh=SQRT(flt_qs(1)**2+flt_qs(2)**2)
           fnrm=flt_qs(3)
-       end select
-       mattmp=transpose(reshape(vecf(j3,:),(/dmn,dmn/)))
+       END SELECT
+       mattmp=TRANSPOSE(RESHAPE(vecf(j3,:),(/dmn,dmn/)))
        ! Cohesive stress if any
-       if (coh(j3)>f0) then
-          d=sqrt(sum(qs_flt_slip(rw_loc(:dmn-1))*qs_flt_slip(rw_loc(:dmn-1))))
-          if (d<dcoh(j3)) then 
+       IF (coh(j3)>f0) THEN
+          d=SQRT(SUM(qs_flt_slip(rw_loc(:dmn-1))*qs_flt_slip(rw_loc(:dmn-1))))
+          IF (d<dcoh(j3)) THEN 
              fcoh=coh(j3)*(f1-d/dcoh(j3))
-          else
+          ELSE
              fcoh=f0
-          end if
-       else
+          END IF
+       ELSE
            fcoh=f0
-       end if
-       if ((fnrm<f0 .and. abs((fsh-fcoh)/fnrm)>mu) .or. fnrm>f0) then
+       END IF
+       IF ((fnrm<f0 .AND. ABS((fsh-fcoh)/fnrm)>mu) .OR. fnrm>f0) THEN
           slip_loc(j3)=1
-       else
+       ELSE
           slip_loc(j3)=0
-       end if
-    end do
-250 call MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,MPI_Comm_World,  &
+       END IF
+    END DO
+250 CALL MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,MPI_Comm_World,  &
        ierr)
     slip0=slip
     slip_sum=slip
     k=k+1
-  end subroutine GetSlip_sta 
+  END SUBROUTINE GetSlip_sta 
 
   ! Scatter from Vec_Ul to Vec_lambda_sta 
-  subroutine LM_s2d
-    implicit none
+  SUBROUTINE LM_s2d
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j2,j3,rw_dyn(dmn),rw_loc(dmn),rw_sta(dmn),                 &
+    INTEGER :: j,j1,j2,j3,rw_dyn(dmn),rw_loc(dmn),rw_sta(dmn),                 &
        idxmp(nfnd_loc*dmn,2)
-    integer,save :: k=0
-    real(8) :: vec(dmn),mattmp(dmn,dmn),vectmp(dmn,1)
-    real(8),target :: flt_sta(n_lmnd*dmn)
-    if (k==0) then
-       do j1=1,nfnd_loc
+    INTEGER,SAVE :: k=0
+    REAL(8) :: vec(dmn),mattmp(dmn,dmn),vectmp(dmn,1)
+    REAL(8),TARGET :: flt_sta(n_lmnd*dmn)
+    IF (k==0) THEN
+       DO j1=1,nfnd_loc
           j=FltMap(j1,1); j3=FltMap(j1,2)
           rw_loc=(/((j1-1)*dmn+j2,j2=1,dmn)/)
           rw_dyn=lmnd0*dmn+(/((j-1)*dmn+j2,j2=1,dmn)/)-1
           idxmp(rw_loc,1)=rw_dyn
-          if (poro) then
-             rw_sta=(/((j3-1)*dmn+sum(perm(1:j3-1))+j2-1,j2=1,dmn)/)
-          else
+          IF (poro) THEN
+             rw_sta=(/((j3-1)*dmn+SUM(perm(1:j3-1))+j2-1,j2=1,dmn)/)
+          ELSE
              rw_sta=(/((j3-1)*dmn+j2-1,j2=1,dmn)/)
-          end if
+          END IF
           idxmp(rw_loc,2)=rw_sta
-       end do
-       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc*dmn,idxmp(:,2),          &
+       END DO
+       CALL ISCreateGeneral(Petsc_Comm_World,nfnd_loc*dmn,idxmp(:,2),          &
           Petsc_Copy_Values,From,ierr)
-       call ISCreateGeneral(Petsc_Comm_World,nfnd_loc*dmn,idxmp(:,1),          &
+       CALL ISCreateGeneral(Petsc_Comm_World,nfnd_loc*dmn,idxmp(:,1),          &
           Petsc_Copy_Values,To,ierr)
-       call VecScatterCreate(Vec_Ul,From,Vec_lambda_sta,To,Scatter_s2d,ierr)
-    end if
-    call VecScatterBegin(Scatter_s2d,Vec_Ul,Vec_lambda_sta,Insert_Values,      &
+       CALL VecScatterCreate(Vec_Ul,From,Vec_lambda_sta,To,Scatter_s2d,ierr)
+    END IF
+    CALL VecScatterBegin(Scatter_s2d,Vec_Ul,Vec_lambda_sta,Insert_Values,      &
        Scatter_Forward,ierr)
-    call VecScatterEnd(Scatter_s2d,Vec_Ul,Vec_lambda_sta,Insert_Values,        &
+    CALL VecScatterEnd(Scatter_s2d,Vec_Ul,Vec_lambda_sta,Insert_Values,        &
        Scatter_Forward,ierr)
     ! Rotate and scale
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
+    CALL VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_sta=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    do j1=1,nfnd_loc
+    CALL VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    DO j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        rw_dyn=lmnd0*dmn+rw_loc-1
        vec=flt_sta(rw_loc)*wt
-       vectmp=reshape(vec,(/dmn,1/))
-       mattmp=transpose(reshape(vecf(j3,:),(/dmn,dmn/)))
-       vectmp=matmul(mattmp,vectmp)
+       vectmp=RESHAPE(vec,(/dmn,1/))
+       mattmp=TRANSPOSE(RESHAPE(vecf(j3,:),(/dmn,dmn/)))
+       vectmp=MATMUL(mattmp,vectmp)
        vec=vectmp(:,1)
-       call VecSetValues(Vec_lambda_sta,dmn,rw_dyn,vec,Insert_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_lambda_sta,ierr)
-    call VecAssemblyEnd(Vec_lambda_sta,ierr)
+       CALL VecSetValues(Vec_lambda_sta,dmn,rw_dyn,vec,Insert_Values,ierr)
+    END DO
+    CALL VecAssemblyBegin(Vec_lambda_sta,ierr)
+    CALL VecAssemblyEnd(Vec_lambda_sta,ierr)
     k=k+1
-  end subroutine LM_s2d 
+  END SUBROUTINE LM_s2d 
 
   ! Cap dynamic LM by frictional laws 
-  subroutine CapLM_dyn
-    implicit none
+  SUBROUTINE CapLM_dyn
+    IMPLICIT NONE
 #include "petsc.h"
-    integer ::j,j1,j2,j3,rw_loc(dmn)
-    real(8) :: d,dd,fr,frs,frd,fsh,mu,fcoh,fnrm,rsftau,vec_init(dmn),vec(dmn), &
+    INTEGER ::j,j1,j2,j3,rw_loc(dmn)
+    REAL(8) :: d,dd,fr,frs,frd,fsh,mu,fcoh,fnrm,rsftau,vec_init(dmn),vec(dmn), &
        lm_sta(dmn),lm_dyn(dmn),lm_dyn0(dmn),mattmp(dmn,dmn)
-    real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
+    REAL(8),TARGET :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn),                 &
        flt_dyn0(n_lmnd*dmn)
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
+    CALL VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_sta=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    call VecGetArrayF90(Vec_lambda,pntr,ierr)
+    CALL VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    CALL VecGetArrayF90(Vec_lambda,pntr,ierr)
     flt_dyn=pntr
-    call VecRestoreArrayF90(Vec_lambda,pntr,ierr)
-    call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
+    CALL VecRestoreArrayF90(Vec_lambda,pntr,ierr)
+    CALL VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn0=pntr
-    call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
+    CALL VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
     rsftau=f0
-    do j1=1,nfnd_loc
+    DO j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        vec_init=st_init(j3,:)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        lm_sta=flt_sta(rw_loc)
        lm_dyn0=flt_dyn0(rw_loc)
        lm_dyn=flt_dyn(rw_loc)
-       d=sqrt(sum(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
+       d=SQRT(SUM(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
        vec=vec_init+lm_sta+lm_dyn0+lm_dyn 
-       if (rsf==1) then ! Rate state friction
+       IF (rsf==1) THEN ! Rate state friction
           ! RSF options
           !dd=max(v_bg*dt_dyn,sqrt(sum(flt_slip(rw_loc(:dmn-1))                 &
           !   *flt_slip(rw_loc(:dmn-1)))))
@@ -778,7 +811,7 @@ contains
           !   *flt_slip(rw_loc(:dmn-1)))))
           !dd=rsfv(j3)*dt_dyn+sqrt(sum(flt_slip(rw_loc(:dmn-1))                 &
           !   *flt_slip(rw_loc(:dmn-1))))
-          dd=max(v_bg*dt_dyn,flt_slip(rw_loc(1))) ! Only for SCEC102
+          dd=MAX(v_bg*dt_dyn,flt_slip(rw_loc(1))) ! Only for SCEC102
 
           ! Stabilize RSF velocity
           !if (tstep>1) then
@@ -786,675 +819,678 @@ contains
           !   if (rsf_sta(j1)==1) dd=min(dd,vtol*dt_dyn)
           !end if
 
-          rsftheta(j3)=max(dt_dyn,dt_dyn/(f1+dd/f2/rsfL(j3))                   &
+          rsftheta(j3)=MAX(dt_dyn,dt_dyn/(f1+dd/f2/rsfL(j3))                   &
              +rsftheta(j3)*(f1-dd/rsfL(j3)/f2)/(f1+dd/rsfL(j3)/f2))
-          mu=rsfa(j3)*asinh(dd/dt_dyn/rsfV0(j3)/f2*exp((rsfb0(j3)              &
-             +rsfb(j3)*log(rsfV0(j3)*rsftheta(j3)/rsfL(j3)))/rsfa(j3)))
+          mu=rsfa(j3)*asinh(dd/dt_dyn/rsfV0(j3)/f2*EXP((rsfb0(j3)              &
+             +rsfb(j3)*LOG(rsfV0(j3)*rsftheta(j3)/rsfL(j3)))/rsfa(j3)))
           ! Only for SCEC102
-          call GetExSt(xfnd(j3,:),t_hyb,rsfdtau0(j3),rsftau)
-       else ! Slip weakening
-          if (d<dc(j3)) then
+          CALL GetExSt(xfnd(j3,:),t_hyb,rsfdtau0(j3),rsftau)
+       ELSE ! Slip weakening
+          IF (d<dc(j3)) THEN
              mu=(f1-d/dc(j3))*(fc(j3)-fcd(j3))+fcd(j3)
-          else
+          ELSE
              mu=fcd(j3)
-          end if
-       end if
+          END IF
+       END IF
        mu_hyb(j3)=mu
        vec(1)=vec(1)+rsftau
-       select case(dmn)
-       case(2)
-          fsh=abs(vec(1))
+       SELECT CASE(dmn)
+       CASE(2)
+          fsh=ABS(vec(1))
           fnrm=vec(2)
-       case(3)
-          fsh=sqrt(vec(1)**2+vec(2)**2)
+       CASE(3)
+          fsh=SQRT(vec(1)**2+vec(2)**2)
           fnrm=vec(3)
-       end select
-       mattmp=transpose(reshape(vecf(j3,:),(/dmn,dmn/)))
+       END SELECT
+       mattmp=TRANSPOSE(RESHAPE(vecf(j3,:),(/dmn,dmn/)))
        ! Slip weakening cohesion
-       if (coh(j3)>f0) then
+       IF (coh(j3)>f0) THEN
           ! Cumulative slip 
-          d=d+sqrt(sum(qs_flt_slip(rw_loc(:dmn-1))*qs_flt_slip(rw_loc(:dmn-1))))
-          if (d<dcoh(j3)) then
+          d=d+SQRT(SUM(qs_flt_slip(rw_loc(:dmn-1))*qs_flt_slip(rw_loc(:dmn-1))))
+          IF (d<dcoh(j3)) THEN
              fcoh=coh(j3)*(f1-d/dcoh(j3))
-          else
+          ELSE
              fcoh=f0
-          end if
-       else
+          END IF
+       ELSE
           fcoh=f0
-       end if
+       END IF
        ! If LM exceeds maximum friction (mu*fn)
-       if (fnrm<f0 .and. abs(fsh)>mu*abs(fnrm)+fcoh) then
-          fr=mu*abs(fnrm)+fcoh 
-          frs=fr*abs(vec(1)/fsh)
-          frs=sign(frs,vec(1))
+       IF (fnrm<f0 .AND. ABS(fsh)>mu*ABS(fnrm)+fcoh) THEN
+          fr=mu*ABS(fnrm)+fcoh 
+          frs=fr*ABS(vec(1)/fsh)
+          frs=SIGN(frs,vec(1))
           vec(1)=frs
-          if (dmn==3) then
-             frd=fr*abs(vec(2)/fsh)
-             frd=sign(frd,vec(2))
+          IF (dmn==3) THEN
+             frd=fr*ABS(vec(2)/fsh)
+             frd=SIGN(frd,vec(2))
              vec(2)=frd
-          end if
+          END IF
        ! Zero friction when fault faces detach under cohesion
-       elseif (fnrm>=f0) then 
-          vec=vec/sqrt(sum(vec*vec))*fcoh
-       end if
+       ELSEIF (fnrm>=f0) THEN 
+          vec=vec/SQRT(SUM(vec*vec))*fcoh
+       END IF
        ! Subtract the static LM 
        vec(1)=vec(1)-rsftau
        lm_dyn=vec-vec_init-lm_sta-lm_dyn0
        rw_loc=lmnd0*dmn+rw_loc-1
        ! From the new dynamic LM
-       call VecSetValues(Vec_lambda,dmn,rw_loc,lm_dyn,Insert_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_lambda,ierr)
-    call VecAssemblyEnd(Vec_lambda,ierr)
-  end subroutine CapLM_dyn
+       CALL VecSetValues(Vec_lambda,dmn,rw_loc,lm_dyn,Insert_Values,ierr)
+    END DO
+    CALL VecAssemblyBegin(Vec_lambda,ierr)
+    CALL VecAssemblyEnd(Vec_lambda,ierr)
+  END SUBROUTINE CapLM_dyn
 
   ! Record latest moment fault stress from the hybrid run
-  subroutine GetVec_lambda_hyb(trunc)
-    implicit none
+  SUBROUTINE GetVec_lambda_hyb(trunc)
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: i,j,j1,j2,j3,rw_loc(dmn),nqs
-    real(8) :: vec(dmn),lm_sta(dmn),lm_dyn(dmn),trunc,dtpsd,a,b0,b,V0,L,mu,dd
-    real(8),target :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn)
-    call VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
+    INTEGER :: i,j,j1,j2,j3,rw_loc(dmn),nqs
+    REAL(8) :: vec(dmn),lm_sta(dmn),lm_dyn(dmn),trunc,dtpsd,a,b0,b,V0,L,mu,dd
+    REAL(8),TARGET :: flt_sta(n_lmnd*dmn),flt_dyn(n_lmnd*dmn)
+    CALL VecGetArrayF90(Vec_lambda_sta,pntr,ierr)
     flt_sta=pntr
-    call VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
-    call VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
+    CALL VecRestoreArrayF90(Vec_lambda_sta,pntr,ierr)
+    CALL VecGetArrayF90(Vec_lambda_tot,pntr,ierr)
     flt_dyn=pntr
-    call VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
+    CALL VecRestoreArrayF90(Vec_lambda_tot,pntr,ierr)
     dtpsd=f1
-    nqs=int((dt-trunc)/dtpsd)
-    do j1=1,nfnd_loc
+    nqs=INT((dt-trunc)/dtpsd)
+    DO j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
        lm_sta=flt_sta(rw_loc)
        lm_dyn=flt_dyn(rw_loc)
-       if (rsf==1) then ! Pseudo time healing for RSF
+       IF (rsf==1) THEN ! Pseudo time healing for RSF
           ! RSF parameters
           a=rsfa(j3); b0=rsfb0(j3); b=rsfb(j3); V0=rsfV0(j3); L=rsfL(j3)
-          do i=1,nqs 
-             vec=lm_sta+lm_dyn*dble(i)/dble(nqs)
-             mu=sqrt(sum(vec(:dmn-1)*vec(:dmn-1)))/abs(vec(dmn))
-             rsfv(j3)=min(vtol,sinh(mu/a)*V0*f2/exp((b0+b*log(V0*rsftheta(j3)/L))/a))
+          DO i=1,nqs 
+             vec=lm_sta+lm_dyn*DBLE(i)/DBLE(nqs)
+             mu=SQRT(SUM(vec(:dmn-1)*vec(:dmn-1)))/ABS(vec(dmn))
+             rsfv(j3)=MIN(vtol,SINH(mu/a)*V0*f2/EXP((b0+b*LOG(V0*rsftheta(j3)/L))/a))
              dd=dtpsd*rsfv(j3)
              rsftheta(j3)=dtpsd/(f1+dd/f2/L)+rsftheta(j3)*(f1-dd/L/f2)/(f1+dd/L/f2)
-          end do
+          END DO
           !print*, mu,rsfv(j3),rsftheta(j3)
-       end if
+       END IF
        vec=lm_sta+lm_dyn
        rw_loc=lmnd0*dmn+rw_loc-1
-       call VecSetValues(Vec_lambda_sta0,dmn,rw_loc,vec,Insert_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_lambda_sta0,ierr)
-    call VecAssemblyEnd(Vec_lambda_sta0,ierr)
-  end subroutine GetVec_lambda_hyb
+       CALL VecSetValues(Vec_lambda_sta0,dmn,rw_loc,vec,Insert_Values,ierr)
+    END DO
+    CALL VecAssemblyBegin(Vec_lambda_sta0,ierr)
+    CALL VecAssemblyEnd(Vec_lambda_sta0,ierr)
+  END SUBROUTINE GetVec_lambda_hyb
 
   ! Time dependent initial stress (SCEC102)
-  subroutine GetExSt(x,t,dst,st)
-    implicit none
-    real(8) :: t,x(dmn),rx2,dst,rsfF,rsfG,R2,rsfT,st
+  SUBROUTINE GetExSt(x,t,dst,st)
+    IMPLICIT NONE
+    REAL(8) :: t,x(dmn),rx2,dst,rsfF,rsfG,R2,rsfT,st
     rsfF=f0;rsfG=f1;R2=9.0;rsfT=f1;st=0
-    if (dmn==3) then
+    IF (dmn==3) THEN
        rx2=x(2)**2+(x(3)+7.5)**2
-    else
+    ELSE
        rx2=(x(2)+7.5)**2
-    end if
-    if (rx2<R2) rsfF=exp(rx2/(rx2-R2))
-    if (t>f0 .and. t<rsfT) rsfG=exp((t-rsfT)**2/t/(t-2*rsfT))
+    END IF
+    IF (rx2<R2) rsfF=EXP(rx2/(rx2-R2))
+    IF (t>f0 .AND. t<rsfT) rsfG=EXP((t-rsfT)**2/t/(t-2*rsfT))
     st=dst*rsfF*rsfG
-  end subroutine GetExSt
+  END SUBROUTINE GetExSt
 
   ! Determine if the dynamic slip is stabilized
-  subroutine GetSlip_dyn
-    implicit none
+  SUBROUTINE GetSlip_dyn
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j2,j3,i,nc,nr,rw_loc(dmn),slip_loc(nfnd),slip_sum_loc(nfnd)
-    real(8) :: d0,d
+    INTEGER :: j,j1,j2,j3,i,nc,nr,rw_loc(dmn),slip_loc(nfnd),slip_sum_loc(nfnd)
+    REAL(8) :: d0,d
     slip_loc=slip
     slip_sum_loc=slip_sum
-    do j1=1,nfnd_loc
+    DO j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2)
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       d=sqrt(sum(flt_slip(rw_loc(:dmn-1))*flt_slip(rw_loc(:dmn-1))))
-       d0=sqrt(sum(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
+       d=SQRT(SUM(flt_slip(rw_loc(:dmn-1))*flt_slip(rw_loc(:dmn-1))))
+       d0=SQRT(SUM(tot_flt_slip(rw_loc(:dmn-1))*tot_flt_slip(rw_loc(:dmn-1))))
        ! Stabilization tolerance 
-       if (rsf==1) then ! Rate state friction
-          if (d0>5e-2*rsfL(j3)) then
-             if ((d/d0)<1E-4) then
+       IF (rsf==1) THEN ! Rate state friction
+          IF (d0>5e-2*rsfL(j3)) THEN
+             IF ((d/d0)<1E-4) THEN
                 slip_loc(j3)=0
-             else
+             ELSE
                 slip_loc(j3)=1
                 slip_sum_loc(j3)=1
-             end if
-          end if
-          if (d/dt_dyn>=vtol) then
+             END IF
+          END IF
+          IF (d/dt_dyn>=vtol) THEN
             slip_loc(j3)=1
             slip_sum_loc(j3)=1
-          end if
-       else ! Slip weakening
-          if (d0>5E-2*dc(j3)) then 
-             if ((d/d0)<1E-4) then
+          END IF
+       ELSE ! Slip weakening
+          IF (d0>5E-2*dc(j3)) THEN 
+             IF ((d/d0)<1E-4) THEN
                 slip_loc(j3)=0
-             else
+             ELSE
                 slip_loc(j3)=1
                 slip_sum_loc(j3)=1
-             end if
-          end if
-       end if
-    end do
+             END IF
+          END IF
+       END IF
+    END DO
     ! Zero off-rank slip
-    if (nfnd_loc>0) then
+    IF (nfnd_loc>0) THEN
        j1=FltMap(1,2)-1; j2=FltMap(nfnd_loc,2)+1
-       if (j1>0) then
+       IF (j1>0) THEN
           slip_loc(:j1)=0
           slip_sum_loc(:j1)=0
-       end if
-       if (j2<=nfnd) then
+       END IF
+       IF (j2<=nfnd) THEN
           slip_loc(j2:)=0
           slip_sum_loc(j2:)=0
-       end if
-    else
+       END IF
+    ELSE
        slip_loc=0
        slip_sum_loc=0
-    end if
-    call MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,                 &
+    END IF
+    CALL MPI_AllReduce(slip_loc,slip,nfnd,MPI_Integer,MPI_Sum,                 &
        MPI_Comm_World,ierr)
-    call MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
+    CALL MPI_AllReduce(slip_sum_loc,slip_sum,nfnd,MPI_Integer,MPI_Sum,         &
        MPI_Comm_World,ierr)
     ! Identify aseismic slip, nc=10 for SCEC10/14 (slow weakening)
     nc=10; nr=15
-    if (ih>nc+rsf*nr .and. sum((slip0-slip_sum)*(slip0-slip_sum))==0) then 
+    IF (ih>nc+rsf*nr .AND. SUM((slip0-slip_sum)*(slip0-slip_sum))==0) THEN 
        slip=0
-       crp=.true.
-    elseif (ih>nc+rsf*nr) then
+       crp=.TRUE.
+    ELSEIF (ih>nc+rsf*nr) THEN
        i=0
-       do j=1,nfnd
-          if (slip0(j)==0 .and. slip(j)==1) i=i+1
-       end do
-       if (i==0) slip=0 ! No slip except nucleation patch
-    elseif (ih<=nc+rsf*nr .and. sum(slip)==0) then 
-       crp=.true. ! Zero slip within time nc+rsf*nr 
-    end if
-  end subroutine GetSlip_dyn 
+       DO j=1,nfnd
+          IF (slip0(j)==0 .AND. slip(j)==1) i=i+1
+       END DO
+       IF (i==0) slip=0 ! No slip except nucleation patch
+    ELSEIF (ih<=nc+rsf*nr .AND. SUM(slip)==0) THEN 
+       crp=.TRUE. ! Zero slip within time nc+rsf*nr 
+    END IF
+  END SUBROUTINE GetSlip_dyn 
 
   ! Get fault QS state 
-  subroutine GetVec_flt_qs
-    implicit none
+  SUBROUTINE GetVec_flt_qs
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: l1,l2,j,j1,r1,r2,row_l,row_f2s,row_p 
-    real(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
+    INTEGER :: l1,l2,j,j1,r1,r2,row_l,row_f2s,row_p 
+    REAL(8) :: lm(dmn),vec(dmn),rvec(dmn),rf2s(dmn),mattmp(dmn,dmn),           &
        vectmp(dmn,1),pval,fltp
-    call VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
-    call VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
-    do j=1,nfnd
+    CALL VecGetOwnershipRange(Vec_Um,l1,l2,ierr)
+    CALL VecGetOwnershipRange(Vec_f2s,r1,r2,ierr)
+    DO j=1,nfnd
        lm=f0; vec=f0; rf2s=0; rvec=f0; pval=f0; fltp=f0
-       do j1=1,dmn 
-          if (poro) then
-             row_l=(dmn+1)*nnds+nceqs_ncf+(j-1)*dmn+sum(perm(1:j-1))+j1-1
-          else
+       DO j1=1,dmn 
+          IF (poro) THEN
+             row_l=(dmn+1)*nnds+nceqs_ncf+(j-1)*dmn+SUM(perm(1:j-1))+j1-1
+          ELSE
              row_l=dmn*nnds+nceqs_ncf+(j-1)*dmn+j1-1
-          end if
+          END IF
           row_f2s=dmn*node_pos(j)-dmn+j1-1
-          if (row_l>=l1 .and. row_l<l2) then
-             call VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
-          end if
-          if (row_f2s>=r1 .and. row_f2s<r2) then
-             call VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
-          end if
-       end do
-       if (poro) then
+          IF (row_l>=l1 .AND. row_l<l2) THEN
+             CALL VecGetValues(Vec_Um,1,row_l,lm(j1),ierr)
+          END IF
+          IF (row_f2s>=r1 .AND. row_f2s<r2) THEN
+             CALL VecGetValues(Vec_f2s,1,row_f2s,rf2s(j1),ierr)
+          END IF
+       END DO
+       IF (poro) THEN
           row_p=(dmn+1)*node_pos(j)-1
-          if (row_p>=l1 .and. row_p<l2) then
-             call VecGetValues(Vec_Um,1,row_p,pval,ierr)
-          end if
-       end if
-       call MPI_Reduce(lm,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
-       call MPI_Reduce(rf2s,rvec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
+          IF (row_p>=l1 .AND. row_p<l2) THEN
+             CALL VecGetValues(Vec_Um,1,row_p,pval,ierr)
+          END IF
+       END IF
+       CALL MPI_Reduce(lm,vec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World,ierr)
+       CALL MPI_Reduce(rf2s,rvec,dmn,MPI_Real8,MPI_Sum,nprcs-1,MPI_Comm_World, &
           ierr)
-       call MPI_Reduce(pval,fltp,1,MPI_Real8,MPI_Sum,nprcs-1,                  &
+       CALL MPI_Reduce(pval,fltp,1,MPI_Real8,MPI_Sum,nprcs-1,                  &
           MPI_Comm_World,ierr)
        ! Rotate vec to fault coordinate
-       if (rank==nprcs-1) then
-          vectmp=reshape(vec,(/dmn,1/))
-          mattmp=transpose(reshape(vecf(j,:),(/dmn,dmn/)))
-          vectmp=matmul(mattmp,vectmp)
+       IF (rank==nprcs-1) THEN
+          vectmp=RESHAPE(vec,(/dmn,1/))
+          mattmp=TRANSPOSE(RESHAPE(vecf(j,:),(/dmn,dmn/)))
+          vectmp=MATMUL(mattmp,vectmp)
           vec(:)=vectmp(:,1)
           ! Nodal force to stress
           flt_ss(j,:)=vec*wt*rvec(dmn)
-          if (poro) flt_p(j)=fltp*scale 
-       end if
-    end do
-    call MPI_Bcast(flt_ss,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-    if (poro) call MPI_Bcast(flt_p,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
-  end subroutine GetVec_flt_qs
+          IF (poro) flt_p(j)=fltp*scale 
+       END IF
+    END DO
+    CALL MPI_Bcast(flt_ss,nfnd*dmn,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
+    IF (poro) CALL MPI_Bcast(flt_p,nfnd,MPI_Real8,nprcs-1,MPI_Comm_World,ierr)
+  END SUBROUTINE GetVec_flt_qs
 
   ! Add fault slip from dynamic model to static model as constraint functions
-  subroutine FaultSlip
-    implicit none
+  SUBROUTINE FaultSlip
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: j,j1,j2,j3,rw_loc(dmn),rw_sta(dmn)
-    real(8) :: vec(dmn),vectmp(dmn,1),mattmp(dmn,dmn)
-    do j1=1,nfnd_loc
+    INTEGER :: j,j1,j2,j3,rw_loc(dmn),rw_sta(dmn)
+    REAL(8) :: vec(dmn),vectmp(dmn,1),mattmp(dmn,dmn)
+    DO j1=1,nfnd_loc
        j=FltMap(j1,1); j3=FltMap(j1,2) 
        rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-       if (poro) then
-          rw_sta=(dmn+1)*nnds+nceqs_ncf+(/((j3-1)*dmn+sum(perm(1:j3-1))        &
+       IF (poro) THEN
+          rw_sta=(dmn+1)*nnds+nceqs_ncf+(/((j3-1)*dmn+SUM(perm(1:j3-1))        &
              +j2-1,j2=1,dmn)/)
-       else
+       ELSE
           rw_sta=dmn*nnds+nceqs_ncf+(/((j3-1)*dmn+j2-1,j2=1,dmn)/)
-       end if
+       END IF
        vec=tot_flt_slip(rw_loc)
        ! Zero non-slip components, and rotate to Cartesian 
        vec(dmn)=f0 
-       vectmp=reshape(vec,(/dmn,1/))
-       mattmp=reshape(vecf(j3,:),(/dmn,dmn/))
-       vectmp=matmul(mattmp,vectmp)
+       vectmp=RESHAPE(vec,(/dmn,1/))
+       mattmp=RESHAPE(vecf(j3,:),(/dmn,dmn/))
+       vectmp=MATMUL(mattmp,vectmp)
        vec=vectmp(:,1)
-       call VecSetValues(Vec_F,dmn,rw_sta,vec*wt,Add_Values,ierr)
-     end do 
-  end subroutine FaultSlip
+       CALL VecSetValues(Vec_F,dmn,rw_sta,vec*wt,Add_Values,ierr)
+     END DO 
+  END SUBROUTINE FaultSlip
 
   ! Extract solution at observation locations
-  subroutine GetVec_obs
-    implicit none
-    integer :: ob,i,j,ind(npel)
-    integer,allocatable :: row(:)
-    real(8) :: vecshp(npel,1)
-    real(8),allocatable :: vectmp(:,:),mattmp(:,:)
-    if (dyn .and. .not. gf) then
-       allocate(row(dmn*npel),vectmp(dmn,1),mattmp(dmn,npel))
-    else
-       allocate(row((dmn+p)*npel),vectmp(dmn+p,1),mattmp(dmn+p,npel))
-    end if
-    do ob=1,nobs_loc
+  SUBROUTINE GetVec_obs
+    IMPLICIT NONE
+    INTEGER :: ob,i,j,ind(npel)
+    INTEGER,ALLOCATABLE :: row(:)
+    REAL(8) :: vecshp(npel,1)
+    REAL(8),ALLOCATABLE :: vectmp(:,:),mattmp(:,:)
+    IF (dyn .AND. .NOT. gf) THEN
+       ALLOCATE(row(dmn*npel),vectmp(dmn,1),mattmp(dmn,npel))
+    ELSE
+       ALLOCATE(row((dmn+p)*npel),vectmp(dmn+p,1),mattmp(dmn+p,npel))
+    END IF
+    DO ob=1,nobs_loc
        ind=onlst(ob,:)
-       if (dyn .and. .not. gf) then
-          do i=1,npel
+       IF (dyn .AND. .NOT. gf) THEN
+          DO i=1,npel
              row((/((i-1)*dmn+j,j=1,dmn)/))=(/((ind(i)-1)*dmn+j,j=1,dmn)/)
-          end do
-          mattmp=reshape(uu_dyn(row),(/dmn,npel/))
-          vecshp=reshape(oshape(ob,:),(/npel,1/))
-          vectmp=matmul(mattmp,vecshp)
+          END DO
+          mattmp=RESHAPE(uu_dyn(row),(/dmn,npel/))
+          vecshp=RESHAPE(oshape(ob,:),(/npel,1/))
+          vectmp=MATMUL(mattmp,vecshp)
           uu_dyn_obs(ob,:)=vectmp(:,1)
-       else
-          do i=1,npel
+       ELSE
+          DO i=1,npel
              row((/((i-1)*(dmn+p)+j,j=1,dmn+p)/))=(/((ind(i)-1)*(dmn+p)+j,j=1, &
                dmn+p)/)
-          end do
-          mattmp=reshape(uu(row),(/dmn+p,npel/))
-          vecshp=reshape(oshape(ob,:),(/npel,1/))
-          vectmp=matmul(mattmp,vecshp) 
+          END DO
+          mattmp=RESHAPE(uu(row),(/dmn+p,npel/))
+          vecshp=RESHAPE(oshape(ob,:),(/npel,1/))
+          vectmp=MATMUL(mattmp,vecshp) 
           uu_obs(ob,:)=vectmp(:,1)
-          if (poro) uu_obs(ob,dmn+1)=vectmp(dmn+1,1)*scale
-       end if
-    end do
-  end subroutine GetVec_obs
+          IF (poro) uu_obs(ob,dmn+1)=vectmp(dmn+1,1)*scale
+       END IF
+    END DO
+  END SUBROUTINE GetVec_obs
 
   ! Apply nodal force
-  subroutine ApplyNodalForce(node,vvec)
-    implicit none
+  SUBROUTINE ApplyNodalForce(node,vvec)
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: node,i,j
-    real(8) :: vvec(:)
-    do i=1,dmn+p
+    INTEGER :: node,i,j
+    REAL(8) :: vvec(:)
+    DO i=1,dmn+p
        j=(dmn+p)*node-(dmn+p)+i-1
-       val=vvec(i); if (i==dmn+1) val=scale*val
-       call VecSetValue(Vec_F,j,val,Add_Values,ierr)
-    end do
-  end subroutine ApplyNodalForce
+       val=vvec(i); IF (i==dmn+1) val=scale*val
+       CALL VecSetValue(Vec_F,j,val,Add_Values,ierr)
+    END DO
+  END SUBROUTINE ApplyNodalForce
 
   ! Apply traction (EbEAve)
-  subroutine ApplyTraction(el,side,vvec)
-    implicit none
-    integer :: el,side,i,snodes(nps)
-    real(8) :: vvec(:),area
+  SUBROUTINE ApplyTraction(el,side,vvec)
+    IMPLICIT NONE
+    INTEGER :: el,side,i,snodes(nps)
+    REAL(8) :: vvec(:),area
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
-    call EdgeAreaNodes(enodes,ecoords,side,area,snodes)
-    vvec=vvec*area/dble(nps)
+    CALL EdgeAreaNodes(enodes,ecoords,side,area,snodes)
+    vvec=vvec*area/DBLE(nps)
     snodes=nl2g(snodes,2)
-    do i=1,nps
-       call ApplyNodalForce(snodes(i),vvec)
-    end do
-  end subroutine ApplyTraction
+    DO i=1,nps
+       CALL ApplyNodalForce(snodes(i),vvec)
+    END DO
+  END SUBROUTINE ApplyTraction
 
   ! Form RHS
-  subroutine FormRHS
-    implicit none
+  SUBROUTINE FormRHS
+    IMPLICIT NONE
 #include "petsc.h"
-    integer :: i,j
-    real(8) :: t1,t2
-    do i=1,nceqs
+    INTEGER :: i,j
+    REAL(8) :: t1,t2
+    ! Account for LM constraints
+    DO i=1,nceqs
        t1=cval(i,2)/dt; t2=cval(i,3)/dt
-       if (tstep>=nint(t1) .and. tstep<=nint(t2)) then
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
           j=(dmn+p)*nnds+i-1
-          if (stype/="explicit" .and. rank==0) then
+          IF (stype/="explicit" .AND. rank==0) THEN
              val=wt*cval(i,1)
-             call VecSetValue(Vec_F,j,val,Add_Values,ierr)
-          end if
-       end if
-    end do
-    do i=1,nfrcs
+             CALL VecSetValue(Vec_F,j,val,Add_Values,ierr)
+          END IF
+       END IF
+    END DO
+    ! Account for nodal force / fluid source values
+    DO i=1,nfrcs
        t1=fval(i,dmn+p+1)/dt; t2=fval(i,dmn+p+2)/dt
-       if (tstep>=nint(t1) .and. tstep<=nint(t2)) then
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
           node=fnode(i); vvec=fval(i,1:dmn+p)
-          if (rank==0) call ApplyNodalForce(node,vvec)
-       end if
-    end do
-    do i=1,ntrcs
+          IF (rank==0) CALL ApplyNodalForce(node,vvec)
+       END IF
+    END DO
+    ! Account for traction BCs
+    DO i=1,ntrcs
        t1=tval(i,dmn+p+1)/dt; t2=tval(i,dmn+p+2)/dt
-       if (tstep>=nint(t1) .and. tstep<=nint(t2)) then
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
           el=telsd(i,1); side=telsd(i,2); vvec=tval(i,1:dmn+p)
-          if (el/=0) call ApplyTraction(el,side,vvec)
-       end if
-    end do
-  end subroutine FormRHS
+          IF (el/=0) CALL ApplyTraction(el,side,vvec)
+       END IF
+    END DO
+  END SUBROUTINE FormRHS
 
   ! Form local damping matrix for elements with viscous dampers
-  subroutine FormLocalAbsC(el,side,dir,m,indx)
-    implicit none
-    integer :: el,side,dir,indx(:)
-    real(8) :: m(:,:)
+  SUBROUTINE FormLocalAbsC(el,side,dir,m,indx)
+    IMPLICIT NONE
+    INTEGER :: el,side,dir,indx(:)
+    REAL(8) :: m(:,:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     dns=mat(id(el),5)
-    call FormElAbsC(enodes,ecoords,side,dir,E,nu,dns,m)
-    call FormElIndx(enodes,indx)
-  end subroutine FormLocalAbsC
+    CALL FormElAbsC(enodes,ecoords,side,dir,E,nu,dns,m)
+    CALL FormElIndx(enodes,indx)
+  END SUBROUTINE FormLocalAbsC
 
   ! Form local damping matrix for elements with viscous dampers
-  subroutine FormLocalAbsC1(el,side,m,indx)
-    implicit none
-    integer :: el,side,indx(:)
-    real(8) :: m(:,:),matabs(dmn,dmn),vec1(dmn),vec2(dmn),vec3(dmn)
+  SUBROUTINE FormLocalAbsC1(el,side,m,indx)
+    IMPLICIT NONE
+    INTEGER :: el,side,indx(:)
+    REAL(8) :: m(:,:),matabs(dmn,dmn),vec1(dmn),vec2(dmn),vec3(dmn)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     dns=mat(id(el),5)
-    select case (eltype) 
-    case("tri")
-       select case(side) 
-       case(1); vec1=ecoords(2,:)-ecoords(1,:)
-       case(2); vec1=ecoords(3,:)-ecoords(2,:)
-       case(3); vec1=ecoords(1,:)-ecoords(3,:)
-       end select
-       vec1=vec1/sqrt(sum(vec1*vec1))
+    SELECT CASE (eltype) 
+    CASE("tri")
+       SELECT CASE(side) 
+       CASE(1); vec1=ecoords(2,:)-ecoords(1,:)
+       CASE(2); vec1=ecoords(3,:)-ecoords(2,:)
+       CASE(3); vec1=ecoords(1,:)-ecoords(3,:)
+       END SELECT
+       vec1=vec1/SQRT(SUM(vec1*vec1))
        vec2(1)=vec1(2); vec2(2)=-vec1(1)
        matabs(:,1)=vec1; matabs(:,2)=vec2
-    case("qua")
-       select case(side) 
-       case(1); vec1=ecoords(2,:)-ecoords(1,:)
-       case(2); vec1=ecoords(3,:)-ecoords(2,:)
-       case(3); vec1=ecoords(4,:)-ecoords(3,:)
-       case(4); vec1=ecoords(1,:)-ecoords(4,:)
-       end select
-       vec1=vec1/sqrt(sum(vec1*vec1))
+    CASE("qua")
+       SELECT CASE(side) 
+       CASE(1); vec1=ecoords(2,:)-ecoords(1,:)
+       CASE(2); vec1=ecoords(3,:)-ecoords(2,:)
+       CASE(3); vec1=ecoords(4,:)-ecoords(3,:)
+       CASE(4); vec1=ecoords(1,:)-ecoords(4,:)
+       END SELECT
+       vec1=vec1/SQRT(SUM(vec1*vec1))
        vec2(1)=vec1(2); vec2(2)=-vec1(1)
        matabs(:,1)=vec1; matabs(:,2)=vec2
-    case("tet")
-       select case(side) 
-       case(1)
+    CASE("tet")
+       SELECT CASE(side) 
+       CASE(1)
           vec1=ecoords(2,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
-       case(2)
+          CALL Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
+       CASE(2)
           vec1=ecoords(4,:)-ecoords(3,:)
-          call Cross(vec1,ecoords(2,:)-ecoords(3,:),vec3)
-       case(3)
+          CALL Cross(vec1,ecoords(2,:)-ecoords(3,:),vec3)
+       CASE(3)
           vec1=ecoords(4,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(3,:)-ecoords(1,:),vec3)
-       case(4)
+          CALL Cross(vec1,ecoords(3,:)-ecoords(1,:),vec3)
+       CASE(4)
           vec1=ecoords(3,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(2,:)-ecoords(1,:),vec3)
-       end select
-       vec1=vec1/sqrt(sum(vec1*vec1))
-       vec3=vec3/sqrt(sum(vec3*vec3))
-       call Cross(vec1,vec3,vec2)
+          CALL Cross(vec1,ecoords(2,:)-ecoords(1,:),vec3)
+       END SELECT
+       vec1=vec1/SQRT(SUM(vec1*vec1))
+       vec3=vec3/SQRT(SUM(vec3*vec3))
+       CALL Cross(vec1,vec3,vec2)
        matabs(:,1)=vec1; matabs(:,2)=vec2; matabs(:,3)=vec3
-    case("hex")
-       select case(side) 
-       case(1)
+    CASE("hex")
+       SELECT CASE(side) 
+       CASE(1)
           vec1=ecoords(2,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(5,:)-ecoords(1,:),vec3)
-       case(2)
+          CALL Cross(vec1,ecoords(5,:)-ecoords(1,:),vec3)
+       CASE(2)
           vec1=ecoords(3,:)-ecoords(2,:)
-          call Cross(vec1,ecoords(6,:)-ecoords(2,:),vec3)
-       case(3)
+          CALL Cross(vec1,ecoords(6,:)-ecoords(2,:),vec3)
+       CASE(3)
           vec1=ecoords(4,:)-ecoords(3,:)
-          call Cross(vec1,ecoords(7,:)-ecoords(3,:),vec3)
-       case(4)
+          CALL Cross(vec1,ecoords(7,:)-ecoords(3,:),vec3)
+       CASE(4)
           vec1=ecoords(5,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
-       case(5)
+          CALL Cross(vec1,ecoords(4,:)-ecoords(1,:),vec3)
+       CASE(5)
           vec1=ecoords(4,:)-ecoords(1,:)
-          call Cross(vec1,ecoords(2,:)-ecoords(1,:),vec3)
-       case(6)
+          CALL Cross(vec1,ecoords(2,:)-ecoords(1,:),vec3)
+       CASE(6)
           vec1=ecoords(6,:)-ecoords(5,:)
-          call Cross(vec1,ecoords(8,:)-ecoords(5,:),vec3)
-       end select
-       vec1=vec1/sqrt(sum(vec1*vec1))
-       vec3=vec3/sqrt(sum(vec3*vec3))
-       call Cross(vec1,vec3,vec2)
+          CALL Cross(vec1,ecoords(8,:)-ecoords(5,:),vec3)
+       END SELECT
+       vec1=vec1/SQRT(SUM(vec1*vec1))
+       vec3=vec3/SQRT(SUM(vec3*vec3))
+       CALL Cross(vec1,vec3,vec2)
        matabs(:,1)=vec1; matabs(:,2)=vec2; matabs(:,3)=vec3
-    end select
-    call FormElAbsC1(enodes,ecoords,side,matabs,E,nu,dns,m)
-    call FormElIndx(enodes,indx)
-  end subroutine FormLocalAbsC1
+    END SELECT
+    CALL FormElAbsC1(enodes,ecoords,side,matabs,E,nu,dns,m)
+    CALL FormElIndx(enodes,indx)
+  END SUBROUTINE FormLocalAbsC1
 
-  subroutine Cross(a,b,r)
-    implicit none
-    real(8) :: a(3),b(3),r(3)
+  SUBROUTINE Cross(a,b,r)
+    IMPLICIT NONE
+    REAL(8) :: a(3),b(3),r(3)
     r(1)=a(2)*b(3)-a(3)*b(2)
     r(2)=a(3)*b(1)-a(1)*b(3)
     r(3)=a(1)*b(2)-a(2)*b(1)
-  end subroutine Cross
+  END SUBROUTINE Cross
 
   ! Form local index
-  subroutine FormLocalIndx(enodes,indx)
-    implicit none
-    integer :: enodes(:),indx(:)
-    if (.not. poro) then
-       call FormElIndx(enodes,indx)
-    else
-       call FormElIndxp(enodes,indx)
-    end if
-  end subroutine FormLocalIndx
+  SUBROUTINE FormLocalIndx(enodes,indx)
+    IMPLICIT NONE
+    INTEGER :: enodes(:),indx(:)
+    IF (.NOT. poro) THEN
+       CALL FormElIndx(enodes,indx)
+    ELSE
+       CALL FormElIndxp(enodes,indx)
+    END IF
+  END SUBROUTINE FormLocalIndx
 
-  subroutine FormLocalIndx_dyn(enodes,indx)
-    implicit none
-    integer :: enodes(:),indx(:)
-    call FormElIndx(enodes,indx)
-  end subroutine FormLocalIndx_dyn
+  SUBROUTINE FormLocalIndx_dyn(enodes,indx)
+    IMPLICIT NONE
+    INTEGER :: enodes(:),indx(:)
+    CALL FormElIndx(enodes,indx)
+  END SUBROUTINE FormLocalIndx_dyn
 
   ! Recover stress
-  subroutine RecoverStress(el,stress)
-    implicit none
-    integer :: el,indxl(eldof)
-    real(8) :: stress(:,:,:)
+  SUBROUTINE RecoverStress(el,stress)
+    IMPLICIT NONE
+    INTEGER :: el,indxl(eldof)
+    REAL(8) :: stress(:,:,:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
-    call FormLocalIndx(enodes,indx)
+    CALL FormLocalIndx(enodes,indx)
     indxl=indx(1:eldof)
-    call CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:))
-  end subroutine RecoverStress
+    CALL CalcElStress(ecoords,uu(indxl),E,nu,stress(el,:,:))
+  END SUBROUTINE RecoverStress
 
   ! Scatter stress to vertices (normal: SS, shear: SH)
-  subroutine GetVec_Stress
-    implicit none
+  SUBROUTINE GetVec_Stress
+    IMPLICIT NONE
 #include "petsc.h"
-    integer:: i,j,indx(eldof),row(dmn)
-    real(8):: sigma(cdmn)
-    do i=1,nels
+    INTEGER:: i,j,indx(eldof),row(dmn)
+    REAL(8):: sigma(cdmn)
+    DO i=1,nels
        enodes=nodes(i,:)
-       call FormElIndx(enodes,indx)
+       CALL FormElIndx(enodes,indx)
        indx=indxmap_u(indx,2)
-       sigma=sum(stress(i,:,:),dim=1)
-       do j=1,nip
-          select case(dmn)
-          case(2)
+       sigma=SUM(stress(i,:,:),dim=1)
+       DO j=1,nip
+          SELECT CASE(dmn)
+          CASE(2)
              row=(/indx((j-1)*dmn+1),indx((j-1)*dmn+2)/)
              sigma(:)=stress(i,j,:)
-             call VecSetValues(Vec_SS,dmn,row,sigma(1:dmn),Insert_Values,ierr)
-             call VecSetValues(Vec_SH,dmn,row,(/sigma(dmn+1:cdmn),             &
+             CALL VecSetValues(Vec_SS,dmn,row,sigma(1:dmn),Insert_Values,ierr)
+             CALL VecSetValues(Vec_SH,dmn,row,(/sigma(dmn+1:cdmn),             &
                 sigma(dmn+1:cdmn)/),Insert_Values,ierr)
-          case(3)
+          CASE(3)
              row=(/indx((j-1)*dmn+1),indx((j-1)*dmn+2),indx((j-1)*dmn+3)/)
              sigma(:)=stress(i,j,:)
-             call VecSetValues(Vec_SS,dmn,row,sigma(1:dmn),Insert_Values,ierr)
-             call VecSetValues(Vec_SH,dmn,row,sigma(dmn+1:cdmn),Insert_Values, &
+             CALL VecSetValues(Vec_SS,dmn,row,sigma(1:dmn),Insert_Values,ierr)
+             CALL VecSetValues(Vec_SH,dmn,row,sigma(dmn+1:cdmn),Insert_Values, &
                 ierr)
-          end select
-       end do
-    end do
-    call VecAssemblyBegin(Vec_SS,ierr)
-    call VecAssemblyEnd(Vec_SS,ierr)
-    call VecAssemblyBegin(Vec_SH,ierr)
-    call VecAssemblyEnd(Vec_SH,ierr)
-  end subroutine GetVec_Stress
+          END SELECT
+       END DO
+    END DO
+    CALL VecAssemblyBegin(Vec_SS,ierr)
+    CALL VecAssemblyEnd(Vec_SS,ierr)
+    CALL VecAssemblyBegin(Vec_SH,ierr)
+    CALL VecAssemblyEnd(Vec_SH,ierr)
+  END SUBROUTINE GetVec_Stress
 
   ! Form local Hs
-  subroutine FormLocalHs(el,Hs,indxp)
-    implicit none
-    real(8) :: Hs(:)
-    integer :: el,j,indxp(:)
+  SUBROUTINE FormLocalHs(el,Hs,indxp)
+    IMPLICIT NONE
+    REAL(8) :: Hs(:)
+    INTEGER :: el,j,indxp(:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
-    call FormElIndxp(enodes,indx)
+    CALL FormElIndxp(enodes,indx)
     indxp=indx(eldof+1:)
     E=mat(id(el),1); nu=mat(id(el),2)
-    call FormElHs(ecoords,uu(indxp),E,nu,scale,Hs)
-    do j=1,npel
-       if (bc(nodes(el,j),dmn+1)==0) Hs(j)=f0
-    end do
-  end subroutine FormLocalHs
+    CALL FormElHs(ecoords,uu(indxp),E,nu,scale,Hs)
+    DO j=1,npel
+       IF (bc(nodes(el,j),dmn+1)==0) Hs(j)=f0
+    END DO
+  END SUBROUTINE FormLocalHs
 
   ! Signed distance point to plane/line
-  subroutine Mix3D(a,b,c,m)
-    implicit none
-    real(8) :: a(3),b(3),c(3),r(3),m 
+  SUBROUTINE Mix3D(a,b,c,m)
+    IMPLICIT NONE
+    REAL(8) :: a(3),b(3),c(3),r(3),m 
     r(1)=a(2)*b(3)-a(3)*b(2)
     r(2)=a(3)*b(1)-a(1)*b(3)
     r(3)=a(1)*b(2)-a(2)*b(1)
     m=(r(1)*c(1)+r(2)*c(2)+r(3)*c(3))/(r(1)*r(1)+r(2)*r(2)+r(3)*r(3))
-  end subroutine Mix3D 
-  subroutine Mix2D(a,b,m)
-    implicit none
-    real(8) :: a(2),b(2),a3(3),b3(3),c3(3),m 
+  END SUBROUTINE Mix3D 
+  SUBROUTINE Mix2D(a,b,m)
+    IMPLICIT NONE
+    REAL(8) :: a(2),b(2),a3(3),b3(3),c3(3),m 
     a3=(/f0,f0,f1/); b3=(/a(:),f0/); c3=(/b(:),f0/)
-    call Mix3D(a3,b3,c3,m) 
-  end subroutine Mix2D
+    CALL Mix3D(a3,b3,c3,m) 
+  END SUBROUTINE Mix2D
 
   ! Observation/FD nodal base 
-  subroutine GetObsNd(strng)
-    implicit none
-    character(2) :: strng
-    integer :: typ,nloop,ob,el
-    integer,allocatable :: nd_full(:,:),pick(:)
-    real(8) :: xmin,xmax,ymin,ymax,zmin,zmax,xmind,xmaxd,ymind,ymaxd,zmind,    &
+  SUBROUTINE GetObsNd(strng)
+    IMPLICIT NONE
+    CHARACTER(2) :: strng
+    INTEGER :: typ,nloop,ob,el
+    INTEGER,ALLOCATABLE :: nd_full(:,:),pick(:)
+    REAL(8) :: xmin,xmax,ymin,ymax,zmin,zmax,xmind,xmaxd,ymind,ymaxd,zmind,    &
        zmaxd,dd,du,dl,dr,df,db,d,eta,nu,psi,xob(dmn),N(npel),c,vec12(dmn),     &
        vec13(dmn),vec14(dmn),vec23(dmn),vec24(dmn),vec34(dmn),vec1o(dmn),      &
        vec2o(dmn),vec3o(dmn),vec15(dmn),vec73(dmn),vec76(dmn),vec78(dmn),      &
        vec7o(dmn)
-    real(8),allocatable :: N_full(:,:)
-    logical :: p_in_dom, p_in_el
+    REAL(8),ALLOCATABLE :: N_full(:,:)
+    LOGICAL :: p_in_dom, p_in_el
     c=0.125d0
 
     ! Type of the evaluation Obs or FD
-    if (strng=="ob") then
+    IF (strng=="ob") THEN
        typ=0
        nloop=nobs
-       allocate(pick(nobs))
-    elseif (strng=="fd") then 
+       ALLOCATE(pick(nobs))
+    ELSEIF (strng=="fd") THEN 
        typ=1
        nloop=ngp
-       allocate(pick(nloop))
-    end if
+       ALLOCATE(pick(nloop))
+    END IF
     pick=0
 
-    select case(eltype) 
-    case("tri"); allocate(nd_full(nloop,3),N_full(nloop,3))
-    case("qua"); allocate(nd_full(nloop,4),N_full(nloop,4))
-    case("tet"); allocate(nd_full(nloop,4),N_full(nloop,4))
-    case("hex"); allocate(nd_full(nloop,8),N_full(nloop,8))
-    end select
-    xmind=minval(coords(:,1)); xmaxd=maxval(coords(:,1))
-    ymind=minval(coords(:,2)); ymaxd=maxval(coords(:,2))
-    if (dmn>2) then
-       zmind=minval(coords(:,3)); zmaxd=maxval(coords(:,3))
-    end if
+    SELECT CASE(eltype) 
+    CASE("tri"); ALLOCATE(nd_full(nloop,3),N_full(nloop,3))
+    CASE("qua"); ALLOCATE(nd_full(nloop,4),N_full(nloop,4))
+    CASE("tet"); ALLOCATE(nd_full(nloop,4),N_full(nloop,4))
+    CASE("hex"); ALLOCATE(nd_full(nloop,8),N_full(nloop,8))
+    END SELECT
+    xmind=MINVAL(coords(:,1)); xmaxd=MAXVAL(coords(:,1))
+    ymind=MINVAL(coords(:,2)); ymaxd=MAXVAL(coords(:,2))
+    IF (dmn>2) THEN
+       zmind=MINVAL(coords(:,3)); zmaxd=MAXVAL(coords(:,3))
+    END IF
 
-    do ob=1,nloop ! Observation loop
-       p_in_dom=.false.
-       if (typ==0) then
+    DO ob=1,nloop ! Observation loop
+       p_in_dom=.FALSE.
+       IF (typ==0) THEN
           xob=ocoord(ob,:)*km2m
-       elseif (typ==1) then
+       ELSEIF (typ==1) THEN
           xob=xgp(ob,:)
-       end if
-       p_in_dom=(xob(1)>=xmind .and. xob(1)<=xmaxd .and. xob(2)>=ymind .and.   &
+       END IF
+       p_in_dom=(xob(1)>=xmind .AND. xob(1)<=xmaxd .AND. xob(2)>=ymind .AND.   &
           xob(2)<=ymaxd)
-       if (dmn>2) p_in_dom=(p_in_dom .and. xob(3)>=zmind .and. xob(3)<=zmaxd)
-       if (p_in_dom) then ! Point probably in domain
-          do el=1,nels
-             p_in_el=.false.
+       IF (dmn>2) p_in_dom=(p_in_dom .AND. xob(3)>=zmind .AND. xob(3)<=zmaxd)
+       IF (p_in_dom) THEN ! Point probably in domain
+          DO el=1,nels
+             p_in_el=.FALSE.
              enodes=nodes(el,:)
              ecoords=coords(enodes,:)
-             select case(dmn)
-             case(2)
-                xmin=minval(ecoords(:,1)); xmax=maxval(ecoords(:,1))
-                ymin=minval(ecoords(:,2)); ymax=maxval(ecoords(:,2))
+             SELECT CASE(dmn)
+             CASE(2)
+                xmin=MINVAL(ecoords(:,1)); xmax=MAXVAL(ecoords(:,1))
+                ymin=MINVAL(ecoords(:,2)); ymax=MAXVAL(ecoords(:,2))
                 ! Point probably in 2D cell 
-                if (xob(1)>=xmin .and. xob(1)<=xmax .and. xob(2)>=ymin .and.   &
-                   xob(2)<=ymax) then
-                   select case(eltype)
-                   case("tri")
+                IF (xob(1)>=xmin .AND. xob(1)<=xmax .AND. xob(2)>=ymin .AND.   &
+                   xob(2)<=ymax) THEN
+                   SELECT CASE(eltype)
+                   CASE("tri")
                       vec12=ecoords(3,:)-ecoords(1,:)
                       vec13=ecoords(3,:)-ecoords(1,:)
                       vec23=ecoords(3,:)-ecoords(2,:)
                       vec1o=xob-ecoords(1,:)
                       vec2o=xob-ecoords(2,:)
                       vec3o=xob-ecoords(3,:)
-                      call Mix2D(vec12,vec1o,dd)
-                      call Mix2D(-vec13,vec3o,dl)
-                      call Mix2D(vec23,vec2o,d)
+                      CALL Mix2D(vec12,vec1o,dd)
+                      CALL Mix2D(-vec13,vec3o,dl)
+                      CALL Mix2D(vec23,vec2o,d)
                       ! Point in tri
-                      if (dd>=f0 .and. dl>=f0 .and. d>=f0) then
-                         call Mix2D(-vec13,vec12,dr)
-                         call Mix2D(vec12,vec13,du)
+                      IF (dd>=f0 .AND. dl>=f0 .AND. d>=f0) THEN
+                         CALL Mix2D(-vec13,vec12,dr)
+                         CALL Mix2D(vec12,vec13,du)
                          eta=dl/dr; nu=dd/du
                          N(1)=f1-eta-nu; N(2)=eta; N(3)=nu
-                         p_in_el=.true.
-                      end if
-                   case("qua")
+                         p_in_el=.TRUE.
+                      END IF
+                   CASE("qua")
                      vec12=ecoords(2,:)-ecoords(1,:)
                      vec14=ecoords(4,:)-ecoords(1,:)
                      vec23=ecoords(3,:)-ecoords(2,:)
                      vec34=ecoords(4,:)-ecoords(3,:)
                      vec1o=xob-ecoords(1,:)
                      vec3o=xob-ecoords(3,:)
-                     call Mix2D(vec12,vec1o,dd)
-                     call Mix2D(-vec14,vec1o,dl)
-                     call Mix2D(vec23,vec3o,dr)
-                     call Mix2D(vec34,vec3o,du)
+                     CALL Mix2D(vec12,vec1o,dd)
+                     CALL Mix2D(-vec14,vec1o,dl)
+                     CALL Mix2D(vec23,vec3o,dr)
+                     CALL Mix2D(vec34,vec3o,du)
                      ! Point in quad
-                     if (dd>=f0 .and. dl>=f0 .and. dr>=f0 .and. du>=f0) then
+                     IF (dd>=f0 .AND. dl>=f0 .AND. dr>=f0 .AND. du>=f0) THEN
                         eta=(dl-dr)/(dl+dr); nu=(dd-du)/(du+dd)
                         N(1)=0.25d0*(f1-eta)*(f1-nu)
                         N(2)=0.25d0*(f1+eta)*(f1-nu)
                         N(3)=0.25d0*(f1+eta)*(f1+nu)
                         N(4)=0.25d0*(f1-eta)*(f1+nu)
-                        p_in_el=.true.
-                     end if
-                   end select ! Tri/qua
-                end if ! Point probably in 2D cell
-             case(3) 
-                xmin=minval(ecoords(:,1)); xmax=maxval(ecoords(:,1))
-                ymin=minval(ecoords(:,2)); ymax=maxval(ecoords(:,2))
-                zmin=minval(ecoords(:,3)); zmax=maxval(ecoords(:,3))
+                        p_in_el=.TRUE.
+                     END IF
+                   END SELECT ! Tri/qua
+                END IF ! Point probably in 2D cell
+             CASE(3) 
+                xmin=MINVAL(ecoords(:,1)); xmax=MAXVAL(ecoords(:,1))
+                ymin=MINVAL(ecoords(:,2)); ymax=MAXVAL(ecoords(:,2))
+                zmin=MINVAL(ecoords(:,3)); zmax=MAXVAL(ecoords(:,3))
                 ! Point probably in 3D cell
-                if (xob(1)>=xmin .and. xob(1)<=xmax .and. xob(2)>=ymin .and.   &
-                   xob(2)<=ymax .and. xob(3)>=zmin .and. xob(3)<=zmax) then
-                   select case(eltype)
-                   case("tet")
+                IF (xob(1)>=xmin .AND. xob(1)<=xmax .AND. xob(2)>=ymin .AND.   &
+                   xob(2)<=ymax .AND. xob(3)>=zmin .AND. xob(3)<=zmax) THEN
+                   SELECT CASE(eltype)
+                   CASE("tet")
                       vec12=ecoords(2,:)-ecoords(1,:)
                       vec13=ecoords(3,:)-ecoords(1,:)
                       vec14=ecoords(4,:)-ecoords(1,:)
@@ -1462,20 +1498,20 @@ contains
                       vec24=ecoords(4,:)-ecoords(2,:)
                       vec1o=xob-ecoords(1,:)
                       vec2o=xob-ecoords(2,:)
-                      call Mix3D(vec12,vec13,vec1o,dd)
-                      call Mix3D(vec13,vec14,vec1o,dl)
-                      call Mix3D(vec14,vec12,vec1o,df)
-                      call Mix3D(vec24,vec23,vec2o,d)
+                      CALL Mix3D(vec12,vec13,vec1o,dd)
+                      CALL Mix3D(vec13,vec14,vec1o,dl)
+                      CALL Mix3D(vec14,vec12,vec1o,df)
+                      CALL Mix3D(vec24,vec23,vec2o,d)
                       ! Point in tet
-                      if (dd>=f0 .and. dl>=f0 .and. df>=f0 .and. d>=f0) then 
-                         call Mix3D(vec12,vec13,vec14,du)
-                         call Mix3D(vec13,vec14,vec12,dr)
-                         call Mix3D(vec14,vec12,vec13,db)
+                      IF (dd>=f0 .AND. dl>=f0 .AND. df>=f0 .AND. d>=f0) THEN 
+                         CALL Mix3D(vec12,vec13,vec14,du)
+                         CALL Mix3D(vec13,vec14,vec12,dr)
+                         CALL Mix3D(vec14,vec12,vec13,db)
                          eta=dl/dr; nu=df/db; psi=dd/du
                          N(1)=f1-eta-nu-psi; N(2)=eta; N(3)=nu; N(4)=psi
-                         p_in_el=.true.
-                      end if
-                   case("hex")
+                         p_in_el=.TRUE.
+                      END IF
+                   CASE("hex")
                       vec12=ecoords(2,:)-ecoords(1,:)
                       vec14=ecoords(4,:)-ecoords(1,:)
                       vec15=ecoords(5,:)-ecoords(1,:)
@@ -1484,15 +1520,15 @@ contains
                       vec78=ecoords(8,:)-ecoords(7,:)
                       vec1o=xob-ecoords(1,:)
                       vec7o=xob-ecoords(7,:)
-                      call Mix3D(vec12,vec14,vec1o,dd)
-                      call Mix3D(vec15,vec12,vec1o,df)
-                      call Mix3D(vec14,vec15,vec1o,dl)
-                      call Mix3D(vec76,vec78,vec7o,du)
-                      call Mix3D(vec78,vec73,vec7o,db)
-                      call Mix3D(vec73,vec76,vec7o,dr)
+                      CALL Mix3D(vec12,vec14,vec1o,dd)
+                      CALL Mix3D(vec15,vec12,vec1o,df)
+                      CALL Mix3D(vec14,vec15,vec1o,dl)
+                      CALL Mix3D(vec76,vec78,vec7o,du)
+                      CALL Mix3D(vec78,vec73,vec7o,db)
+                      CALL Mix3D(vec73,vec76,vec7o,dr)
                       ! Point in hex
-                      if (dd>=f0 .and. dl>=f0 .and. df>=f0 .and. du>=f0 .and.  &
-                         dr>=f0 .and. db>=f0) then
+                      IF (dd>=f0 .AND. dl>=f0 .AND. df>=f0 .AND. du>=f0 .AND.  &
+                         dr>=f0 .AND. db>=f0) THEN
                          eta=(dl-dr)/(dr+dl); nu=(df-db)/(df+db)
                          psi=(dd-du)/(dd+du)
                          N(1)=c*(f1-eta)*(f1-nu)*(f1-psi)
@@ -1503,931 +1539,963 @@ contains
                          N(6)=c*(f1+eta)*(f1-nu)*(f1+psi)
                          N(7)=c*(f1+eta)*(f1+nu)*(f1+psi)
                          N(8)=c*(f1-eta)*(f1+nu)*(f1+psi)
-                         p_in_el=.true.
-                      end if
-                   end select
-                end if ! Point probably in 3D cell
-             end select ! Dimension
+                         p_in_el=.TRUE.
+                      END IF
+                   END SELECT
+                END IF ! Point probably in 3D cell
+             END SELECT ! Dimension
              ! Update local pick list
-             if (p_in_el) then
+             IF (p_in_el) THEN
                 pick(ob)=ob
                 N_full(ob,:)=N
                 nd_full(ob,:)=enodes
-                exit
-             end if
-          end do ! Element loop
-       end if ! Point probably in domain
-    end do ! Observation loop
-    if (typ==0) then
-       nobs_loc=size(pack(pick,pick/=0))
-       allocate(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn))
-       select case(eltype) 
-       case("tri"); allocate(onlst(nobs_loc,3),oshape(nobs_loc,3))
-       case("qua"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
-       case("tet"); allocate(onlst(nobs_loc,4),oshape(nobs_loc,4))
-       case("hex"); allocate(onlst(nobs_loc,8),oshape(nobs_loc,8))
-       end select
-       ol2g=pack(pick,pick/=0)
+                EXIT
+             END IF
+          END DO ! Element loop
+       END IF ! Point probably in domain
+    END DO ! Observation loop
+    IF (typ==0) THEN
+       nobs_loc=SIZE(PACK(pick,pick/=0))
+       ALLOCATE(ol2g(nobs_loc),ocoord_loc(nobs_loc,dmn))
+       SELECT CASE(eltype) 
+       CASE("tri"); ALLOCATE(onlst(nobs_loc,3),oshape(nobs_loc,3))
+       CASE("qua"); ALLOCATE(onlst(nobs_loc,4),oshape(nobs_loc,4))
+       CASE("tet"); ALLOCATE(onlst(nobs_loc,4),oshape(nobs_loc,4))
+       CASE("hex"); ALLOCATE(onlst(nobs_loc,8),oshape(nobs_loc,8))
+       END SELECT
+       ol2g=PACK(pick,pick/=0)
        ocoord_loc=ocoord(ol2g,:)
        onlst=nd_full(ol2g,:)
        oshape=N_full(ol2g,:)
-    elseif (typ==1) then
-       ngp_loc=size(pack(pick,pick/=0))
-       allocate(gpl2g(ngp_loc),idgp_loc(ngp_loc,dmn))
-       select case(eltype) 
-       case("tri"); allocate(gpnlst(ngp_loc,3),gpshape(ngp_loc,3))
-       case("qua"); allocate(gpnlst(ngp_loc,4),gpshape(ngp_loc,4))
-       case("tet"); allocate(gpnlst(ngp_loc,4),gpshape(ngp_loc,4))
-       case("hex"); allocate(gpnlst(ngp_loc,8),gpshape(ngp_loc,8))
-       end select
-       gpl2g=pack(pick,pick/=0)
+    ELSEIF (typ==1) THEN
+       ngp_loc=SIZE(PACK(pick,pick/=0))
+       ALLOCATE(gpl2g(ngp_loc),idgp_loc(ngp_loc,dmn))
+       SELECT CASE(eltype) 
+       CASE("tri"); ALLOCATE(gpnlst(ngp_loc,3),gpshape(ngp_loc,3))
+       CASE("qua"); ALLOCATE(gpnlst(ngp_loc,4),gpshape(ngp_loc,4))
+       CASE("tet"); ALLOCATE(gpnlst(ngp_loc,4),gpshape(ngp_loc,4))
+       CASE("hex"); ALLOCATE(gpnlst(ngp_loc,8),gpshape(ngp_loc,8))
+       END SELECT
+       gpl2g=PACK(pick,pick/=0)
        gpnlst=nd_full(gpl2g,:)
        gpshape=N_full(gpl2g,:)
        idgp_loc=idgp(gpl2g,:)
-    end if
-  end subroutine GetObsNd
+    END IF
+  END SUBROUTINE GetObsNd
 
   ! Active fault node map loc->glb 
-  subroutine GetFltMap
-    implicit none
-    integer :: j,j3,map(n_lmnd,2)
-    integer, allocatable :: rw(:)
+  SUBROUTINE GetFltMap
+    IMPLICIT NONE
+    INTEGER :: j,j3,map(n_lmnd,2)
+    INTEGER, ALLOCATABLE :: rw(:)
     map=0
-    do j=1,n_lmnd
-       if (lmnd0+j>nceqs_ncf/(dmn+p)) then ! Has on rank fault nodes
+    DO j=1,n_lmnd
+       IF (lmnd0+j>nceqs_ncf/(dmn+p)) THEN ! Has on rank fault nodes
           j3=lmnd0+j-nceqs_ncf/(dmn+p)
-          if (frc(j3)>0) then
+          IF (frc(j3)>0) THEN
              map(j,:)=(/j,j3/)
-          end if
-       end if
-    end do
-    nfnd_loc=size(pack(map(:,1),map(:,1)/=0))
-    allocate(rw(nfnd_loc),FltMap(nfnd_loc,2))
-    rw=pack(map(:,1),map(:,1)/=0)
+          END IF
+       END IF
+    END DO
+    nfnd_loc=SIZE(PACK(map(:,1),map(:,1)/=0))
+    ALLOCATE(rw(nfnd_loc),FltMap(nfnd_loc,2))
+    rw=PACK(map(:,1),map(:,1)/=0)
     FltMap=map(rw,:)
-  end subroutine GetFltMap
+  END SUBROUTINE GetFltMap
 
   ! Apply body force
-  subroutine ApplyGravity
-    implicit none
+  SUBROUTINE ApplyGravity
+    IMPLICIT NONE
 #include "petsc.h"
-    real(8) :: dns,gip,gsca,gvec(npel*dmn),ecoords(npel,dmn),detj
-    integer :: el,i,j,indx((dmn+p)*npel),row(dmn*npel)
-    do el=1,nels
+    REAL(8) :: dns,gip,gsca,gvec(npel*dmn),ecoords(npel,dmn),detj
+    INTEGER :: el,i,j,indx((dmn+p)*npel),row(dmn*npel)
+    DO el=1,nels
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
-       call FormElIndx(enodes,indx)
+       CALL FormElIndx(enodes,indx)
        row=indx(1:dmn*npel)
        row=indxmap(row,2)
        dns=mat(id(el),5)
-       gsca=dns*gravity/dble(npel)
+       gsca=dns*gravity/DBLE(npel)
        gip=f0; gvec=f0
-       do i=1,nip
-          call FormdetJ(ipoint(i,:),ecoords,detj)
+       DO i=1,nip
+          CALL FormdetJ(ipoint(i,:),ecoords,detj)
           gip=gip+gsca*weight(i)*detj
-       end do
+       END DO
        ! Assume last dim aligned with gravity
-       do i=1,npel
+       DO i=1,npel
           j=i*dmn
-          if (bc(nodes(el,i),dmn)/=0) gvec(j)=-gip
-       end do
-       call VecSetValues(Vec_F,dmn*npel,row,gvec,Add_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_F,ierr)
-    call VecAssemblyEnd(Vec_F,ierr)
-  end subroutine ApplyGravity
+          IF (bc(nodes(el,i),dmn)/=0) gvec(j)=-gip
+       END DO
+       CALL VecSetValues(Vec_F,dmn*npel,row,gvec,Add_Values,ierr)
+    END DO
+    CALL VecAssemblyBegin(Vec_F,ierr)
+    CALL VecAssemblyEnd(Vec_F,ierr)
+  END SUBROUTINE ApplyGravity
 
   ! Apply fluid body source
-  subroutine ApplySource
-    implicit none
+  SUBROUTINE ApplySource
+    IMPLICIT NONE
 #include "petsc.h"
-    real(8) :: sdns,sip,ssca,svec((dmn+1)*npel),ecoords(npel,dmn),detj
-    integer :: el,i,j,indx((dmn+1)*npel),row((dmn+1)*npel)
-    do el=1,nels
+    REAL(8) :: sdns,sip,ssca,svec((dmn+1)*npel),ecoords(npel,dmn),detj
+    INTEGER :: el,i,j,indx((dmn+1)*npel),row((dmn+1)*npel)
+    DO el=1,nels
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
-       call FormElIndxp(enodes,indx)
+       CALL FormElIndxp(enodes,indx)
        row=indx(1:(dmn+1)*npel)
        row=indxmap(row,2)
        sdns=mat(id(el),10)
-       ssca=sdns/dble(npel)
+       ssca=sdns/DBLE(npel)
        sip=f0; svec=f0
-       do i=1,nip
-          call FormdetJ(ipoint(i,:),ecoords,detj)
+       DO i=1,nip
+          CALL FormdetJ(ipoint(i,:),ecoords,detj)
           sip=sip+ssca*weight(i)*detj
-       end do
-       do i=1,npel
+       END DO
+       DO i=1,npel
           j=i*(dmn+1)
-          if (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip
-       end do
-       call VecSetValues(Vec_F,(dmn+1)*npel,row,svec,Add_Values,ierr)
-    end do
-    call VecAssemblyBegin(Vec_F,ierr)
-    call VecAssemblyEnd(Vec_F,ierr)
-  end subroutine ApplySource
+          IF (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip
+       END DO
+       CALL VecSetValues(Vec_F,(dmn+1)*npel,row,svec,Add_Values,ierr)
+    END DO
+    CALL VecAssemblyBegin(Vec_F,ierr)
+    CALL VecAssemblyEnd(Vec_F,ierr)
+  END SUBROUTINE ApplySource
 
   ! Reform RHS
-  subroutine ReformLocalRHS(el,f,indx)
-    implicit none
-    integer :: el,indx(:),j,j1
-    real(8) :: f(:)
+  SUBROUTINE ReformLocalRHS(el,f,indx)
+    IMPLICIT NONE
+    INTEGER :: el,indx(:),j,j1
+    REAL(8) :: f(:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     visc=mat(id(el),3); expn=mat(id(el),4)
     f=f0
-    call ReformElRHS(ecoords,stress(el,:,:),E,nu,visc,expn,dt,f(1:eldof))
-    call FormLocalIndx(enodes,indx)
+    CALL ReformElRHS(ecoords,stress(el,:,:),E,nu,visc,expn,dt,f(1:eldof))
+    CALL FormLocalIndx(enodes,indx)
     ! Fix BCs (i.e., zero out entries)
-    do j=1,npel
-       do j1=1,dmn
-          if (bc(nodes(el,j),j1)==0) f(dmn*j-dmn+j1)=f0
-       end do
-    end do
-  end subroutine ReformLocalRHS
+    DO j=1,npel
+       DO j1=1,dmn
+          IF (bc(nodes(el,j),j1)==0) f(dmn*j-dmn+j1)=f0
+       END DO
+    END DO
+  END SUBROUTINE ReformLocalRHS
 
   ! Recover Vstress during implicit time stepping
-  subroutine RecoverVStress(el,stress)
-    implicit none
-    integer :: el,indxl(eldof)
-    real(8) :: stress(:,:,:)
+  SUBROUTINE RecoverVStress(el,stress)
+    IMPLICIT NONE
+    INTEGER :: el,indxl(eldof)
+    REAL(8) :: stress(:,:,:)
     enodes=nodes(el,:)
     ecoords=coords(enodes,:)
     E=mat(id(el),1); nu=mat(id(el),2)
     visc=mat(id(el),3); expn=mat(id(el),4)
-    call FormLocalIndx(enodes,indx)
+    CALL FormLocalIndx(enodes,indx)
     indxl=indx(1:eldof)
-    call CalcElVStress(ecoords,uu(indxl),stress(el,:,:),E,nu,visc,expn,dt)
-  end subroutine RecoverVStress
+    CALL CalcElVStress(ecoords,uu(indxl),stress(el,:,:),E,nu,visc,expn,dt)
+  END SUBROUTINE RecoverVStress
 
   ! Account for Winkler foundation(s)
-  subroutine AddWinklerFdn(el,k)
-    implicit none
-    integer :: el,j,j1,j2,elbc(npel,dmn),snodes(nps)
-    real(8) :: k(:,:),area
+  SUBROUTINE AddWinklerFdn(el,k)
+    IMPLICIT NONE
+    INTEGER :: el,j,j1,j2,elbc(npel,dmn),snodes(nps)
+    REAL(8) :: k(:,:),area
     dns=mat(id(el),5)
     elbc=bc(enodes,1:dmn)
-    do j1=1,dmn
-       call GetWinklerEdge(elbc,j1,side)
-       if (side==0) cycle
-       call EdgeAreaNodes(enodes,ecoords,side,area,snodes)
-       val=dns*gravity*area/dble(nps)
-       do j=1,npel
-          if (elbc(j,j1)==-1) then
+    DO j1=1,dmn
+       CALL GetWinklerEdge(elbc,j1,side)
+       IF (side==0) CYCLE
+       CALL EdgeAreaNodes(enodes,ecoords,side,area,snodes)
+       val=dns*gravity*area/DBLE(nps)
+       DO j=1,npel
+          IF (elbc(j,j1)==-1) THEN
              j2=dmn*j-dmn+j1; k(j2,j2)=k(j2,j2)+val
-          end if
-       end do
-    end do
-  end subroutine AddWinklerFdn
+          END IF
+       END DO
+    END DO
+  END SUBROUTINE AddWinklerFdn
 
   ! Fix BCs (i.e., zero rows/columns) in local [K/Kp]
-  subroutine FixBCinLocalK(el,k)
-    implicit none
-    integer :: el,j,j1,j2
-    real(8) :: k(:,:)
-    do j=1,npel
-       do j1=1,dmn
-          if (bc(nodes(el,j),j1)==0) then
+  SUBROUTINE FixBCinLocalK(el,k)
+    IMPLICIT NONE
+    INTEGER :: el,j,j1,j2
+    REAL(8) :: k(:,:)
+    ! Account for fixed displacement BC
+    DO j=1,npel
+       DO j1=1,dmn
+          IF (bc(nodes(el,j),j1)==0) THEN
              j2=dmn*j-dmn+j1
              val=k(j2,j2)
              k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
              k(j2,j2)=val
-          end if
-       end do
-       if (poro) then
-          if (bc(nodes(el,j),dmn+1)==0) then
+          END IF
+       END DO
+       IF (poro) THEN
+          IF (bc(nodes(el,j),dmn+1)==0) THEN
              j2=dmn*npel+j
              val=k(j2,j2)
              k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
              k(j2,j2)=val
-          end if
-       end if
-    end do
-  end subroutine FixBCinLocalK
+          END IF
+       END IF
+    END DO
+  END SUBROUTINE FixBCinLocalK
 
-  ! Print message
-  subroutine PrintMsg(msg)
-    implicit none
-    character(*) :: msg
-    if (rank==0) print*,msg
-  end subroutine PrintMsg
+  ! Fix BCs (i.e., zero rows/columns) in local [K/Kp]
+  ! Includes Dirichlet Pressure
+  SUBROUTINE FixBCinLocalK_DP(el,k,f)
+    IMPLICIT NONE
+    INTEGER :: el,j,j1,j2
+    REAL(8) :: k(:,:),f(:),rxp
+    ! Account for fixed displacement BC
+    DO j=1,npel
+       DO j1=1,dmn
+          IF (bc(nodes(el,j),j1)==0) THEN
+             j2=dmn*j-dmn+j1
+             val=k(j2,j2)
+             k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
+             k(j2,j2)=val
+          END IF
+       END DO
+       IF (poro) THEN
+          IF (bc(nodes(el,j),dmn+1)==0) THEN
+             rxp = rx_press(nodes(el,j))
+             j2=dmn*npel+j
+             f(:) = f(:) - k(:,j2)*rxp
+             f(j2) = rxp
+             !val=k(j2,j2)
+             k(j2,:)=f0; k(:,j2)=f0 ! Zero out rows and columns
+             !k(j2,j2)=val
+             k(j2,j2) = f1
+          END IF
+       END IF
+    END DO
+  END SUBROUTINE FixBCinLocalK_DP
+
+  ! DP Print
+  SUBROUTINE PrintMsg(msg)
+    IMPLICIT NONE
+    CHARACTER(*) :: msg
+    IF (rank==0) PRINT*,msg
+  END SUBROUTINE PrintMsg
 
   ! Write results in ASCII VTK (legacy) format
-  subroutine WriteOutput
-    implicit none
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    integer :: i,j,j1,lnnds,lnels
-    real(8),pointer :: field_val(:)
-    if (dsp==0) field_val=>uu
-    if (dsp==1) field_val=>tot_uu
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,I0,3A,I0.6,A)')trim(name0),rank,"_",trim(name1),"_",k,".vtk"
-    if (dsp_dyn) then
-       if (dsp_hyb==1) then
+  SUBROUTINE WriteOutput
+    IMPLICIT NONE
+    CHARACTER(64) :: fmt
+    CHARACTER(256) :: name,name0,name1
+    INTEGER,SAVE :: k=0
+    INTEGER :: i,j,j1,lnnds,lnels
+    REAL(8),POINTER :: field_val(:)
+    IF (dsp==0) field_val=>uu
+    IF (dsp==1) field_val=>tot_uu
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,I0,3A,I0.6,A)')TRIM(name0),rank,"_",TRIM(name1),"_",k,".vtk"
+    IF (dsp_dyn) THEN
+       IF (dsp_hyb==1) THEN
           field_val=>tot_uu_dyn
-       else
+       ELSE
           field_val=>uu_dyn
-       end if
-       write(name,'(A,I0,3A,I0.6,A)')trim(name0),rank,"_",trim(name1),"_dyn_", &
+       END IF
+       WRITE(name,'(A,I0,3A,I0.6,A)')TRIM(name0),rank,"_",TRIM(name1),"_dyn_", &
           k,".vtk"
-    end if
-    open(10,file=adjustl(name),status='replace')
-    lnnds=size(coords,1)
-    lnels=size(nodes,1)
-    write(10,'(A)')"# vtk DataFile Version 2.0"
-    write(10,'(A)')"File written by Defmod-dev"
-    write(10,'(A)')"ASCII"
-    write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
-    write(10,'(A,I0,A)')"POINTS ",lnnds," double"
+    END IF
+    OPEN(10,file=ADJUSTL(name),status='replace')
+    lnnds=SIZE(coords,1)
+    lnels=SIZE(nodes,1)
+    WRITE(10,'(A)')"# vtk DataFile Version 2.0"
+    WRITE(10,'(A)')"File written by Defmod-dev"
+    WRITE(10,'(A)')"ASCII"
+    WRITE(10,'(A)')"DATASET UNSTRUCTURED_GRID"
+    WRITE(10,'(A,I0,A)')"POINTS ",lnnds," double"
     fmt="(3(F0.3,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m),f0/)
-       end do
-    case(3)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m)/)
-       end do
-    end select
-    write(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
-    select case(npel)
-    case(3); fmt="(I0,3(1X,I0))"
-    case(4); fmt="(I0,4(1X,I0))"
-    case(8); fmt="(I0,8(1X,I0))"
-    end select
-    do i=1,lnels
-       write(10,fmt)npel,nodes(i,:)-1
-    end do
-    write(10,'(A,I0)')"CELL_TYPES ",lnels
-    do i=1,lnels
-       write(10,'(I0)')vtkid
-    end do
-    write(10,'(A,I0)')"POINT_DATA ",lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m),f0/)
+       END DO
+    CASE(3)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m)/)
+       END DO
+    END SELECT
+    WRITE(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
+    SELECT CASE(npel)
+    CASE(3); fmt="(I0,3(1X,I0))"
+    CASE(4); fmt="(I0,4(1X,I0))"
+    CASE(8); fmt="(I0,8(1X,I0))"
+    END SELECT
+    DO i=1,lnels
+       WRITE(10,fmt)npel,nodes(i,:)-1
+    END DO
+    WRITE(10,'(A,I0)')"CELL_TYPES ",lnels
+    DO i=1,lnels
+       WRITE(10,'(I0)')vtkid
+    END DO
+    WRITE(10,'(A,I0)')"POINT_DATA ",lnnds
     j=dmn+p
-    if (dsp_dyn) j=dmn
-    if (poro .and. .not. dsp_dyn) then
-       write(10,'(A)')"SCALARS pressure double"
-       write(10,'(A)')"LOOKUP_TABLE default"
+    IF (dsp_dyn) j=dmn
+    IF (poro .AND. .NOT. dsp_dyn) THEN
+       WRITE(10,'(A)')"SCALARS pressure double"
+       WRITE(10,'(A)')"LOOKUP_TABLE default"
        fmt="(1(F0.3,1X))"
-       do i=1,lnnds
+       DO i=1,lnnds
           j1=i*j
-          write(10,fmt)(scale*field_val(j1)) ! Pr
-       end do
-    end if
-    write(10,'(A)')"VECTORS displacements double"
+          WRITE(10,fmt)(scale*field_val(j1)) ! Pr
+       END DO
+    END IF
+    WRITE(10,'(A)')"VECTORS displacements double"
     fmt="(3(F0.6,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
           j1=i*j-p
-          if (dsp_dyn) j1=i*j
-          write(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
-       end do
-    case(3)
-       do i=1,lnnds
+          IF (dsp_dyn) j1=i*j
+          WRITE(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
+       END DO
+    CASE(3)
+       DO i=1,lnnds
           j1=i*j-p
-          if (dsp_dyn) j1=i*j
-          write(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
-       end do
-    end select
-    close(10); k=k+1
-  end subroutine WriteOutput
+          IF (dsp_dyn) j1=i*j
+          WRITE(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
+       END DO
+    END SELECT
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput
 
-  subroutine WriteOutput_x
-    implicit none
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    integer :: i,j,j1,j2,j3,lnnds,lnels
-    real(8),pointer :: field_val(:),field_val_fp(:),field_val_fl(:),           &
+  SUBROUTINE WriteOutput_x
+    IMPLICIT NONE
+    CHARACTER(64) :: fmt
+    CHARACTER(256) :: name,name0,name1
+    INTEGER,SAVE :: k=0
+    INTEGER :: i,j,j1,j2,j3,lnnds,lnels
+    REAL(8),POINTER :: field_val(:),field_val_fp(:),field_val_fl(:),           &
        field_val_qu(:),field_val_ql(:),field_val_flc(:),field_val_ss(:),       &
        field_val_sh(:)
-    if (dsp==0) field_val=>uu
-    if (dsp==1) field_val=>tot_uu
-    if (nceqs>0) field_val_fl=>fl; field_val_ql=>ql; field_val_flc=>flc
-    if (poro) field_val_fp=>fp; field_val_qu=>qu
-    if (fault .and. lm_str==1) field_val_ss=>ss; field_val_sh=>sh
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,I0,3A,I0.6,A)')trim(name0),rank,"_",trim(name1),"_",k,".vtk"
-    open(10,file=adjustl(name),status='replace')
-    lnnds=size(coords,1)
-    lnels=size(nodes,1)
-    write(10,'(A)')"# vtk DataFile Version 2.0"
-    write(10,'(A)')"File written by Defmod-dev"
-    write(10,'(A)')"ASCII"
-    write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
-    write(10,'(A,I0,A)')"POINTS ",lnnds," double"
+    IF (dsp==0) field_val=>uu
+    IF (dsp==1) field_val=>tot_uu
+    IF (nceqs>0) field_val_fl=>fl; field_val_ql=>ql; field_val_flc=>flc
+    IF (poro) field_val_fp=>fp; field_val_qu=>qu
+    IF (fault .AND. lm_str==1) field_val_ss=>ss; field_val_sh=>sh
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,I0,3A,I0.6,A)')TRIM(name0),rank,"_",TRIM(name1),"_",k,".vtk"
+    OPEN(10,file=ADJUSTL(name),status='replace')
+    lnnds=SIZE(coords,1)
+    lnels=SIZE(nodes,1)
+    WRITE(10,'(A)')"# vtk DataFile Version 2.0"
+    WRITE(10,'(A)')"File written by Defmod-dev"
+    WRITE(10,'(A)')"ASCII"
+    WRITE(10,'(A)')"DATASET UNSTRUCTURED_GRID"
+    WRITE(10,'(A,I0,A)')"POINTS ",lnnds," double"
     fmt="(3(F0.3,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m),f0/)
-       end do
-    case(3)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m)/)
-       end do
-    end select
-    write(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
-    select case(npel)
-    case(3); fmt="(I0,3(1X,I0))"
-    case(4); fmt="(I0,4(1X,I0))"
-    case(8); fmt="(I0,8(1X,I0))"
-    end select
-    do i=1,lnels
-       write(10,fmt)npel,nodes(i,:)-1
-    end do
-    write(10,'(A,I0)')"CELL_TYPES ",lnels
-    do i=1,lnels
-       write(10,'(I0)')vtkid
-    end do
-    write(10,'(A,I0)')"POINT_DATA ",lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m),f0/)
+       END DO
+    CASE(3)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m)/)
+       END DO
+    END SELECT
+    WRITE(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
+    SELECT CASE(npel)
+    CASE(3); fmt="(I0,3(1X,I0))"
+    CASE(4); fmt="(I0,4(1X,I0))"
+    CASE(8); fmt="(I0,8(1X,I0))"
+    END SELECT
+    DO i=1,lnels
+       WRITE(10,fmt)npel,nodes(i,:)-1
+    END DO
+    WRITE(10,'(A,I0)')"CELL_TYPES ",lnels
+    DO i=1,lnels
+       WRITE(10,'(I0)')vtkid
+    END DO
+    WRITE(10,'(A,I0)')"POINT_DATA ",lnnds
     j=dmn+p; j2=dmn
-    if (poro) then
-       write(10,'(A)')"SCALARS pressure double"
-       write(10,'(A)')"LOOKUP_TABLE default"
+    IF (poro) THEN
+       WRITE(10,'(A)')"SCALARS pressure double"
+       WRITE(10,'(A)')"LOOKUP_TABLE default"
        fmt="(1(F0.3,1X))"
-       do i=1,lnnds
+       DO i=1,lnnds
           j1=i*j
-          write(10,fmt)(scale*field_val(j1)) ! Pr
-       end do
-       write(10,'(A)')"SCALARS qu double"
-       write(10,'(A)')"LOOKUP_TABLE default"
+          WRITE(10,fmt)(scale*field_val(j1)) ! Pr
+       END DO
+       WRITE(10,'(A)')"SCALARS qu double"
+       WRITE(10,'(A)')"LOOKUP_TABLE default"
        fmt="(1(F0.3,1X))"
-       do i=1,lnnds
-          write(10,fmt)(field_val_qu(i)) ! qu
-       end do
-       write(10,'(A)')"VECTORS fp double"
+       DO i=1,lnnds
+          WRITE(10,fmt)(field_val_qu(i)) ! qu
+       END DO
+       WRITE(10,'(A)')"VECTORS fp double"
        fmt="(3(F0.6,1X))"
-       select case(dmn)
-       case(2)
-          do i=1,lnnds
+       SELECT CASE(dmn)
+       CASE(2)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_fp(j1-1),field_val_fp(j1),f0/) ! 2D U
-          end do
-       case(3)
-          do i=1,lnnds
+             WRITE(10,fmt)(/field_val_fp(j1-1),field_val_fp(j1),f0/) ! 2D U
+          END DO
+       CASE(3)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_fp(j1-2),field_val_fp(j1-1),             &
+             WRITE(10,fmt)(/field_val_fp(j1-2),field_val_fp(j1-1),             &
                 field_val_fp(j1)/) ! 3D U
-          end do
-       end select
-       if (nceqs > 0) then
-          write(10,'(A)')"SCALARS ql double"
-          write(10,'(A)')"LOOKUP_TABLE default"
+          END DO
+       END SELECT
+       IF (nceqs > 0) THEN
+          WRITE(10,'(A)')"SCALARS ql double"
+          WRITE(10,'(A)')"LOOKUP_TABLE default"
           fmt="(1(F0.3,1X))"
-          do i=1,lnnds
-             write(10,fmt)(field_val_ql(i)) ! ql
-          end do
-       end if
-    end if
-    if (fault .and. lm_str==1) then
-       write(10,'(A)')"VECTORS ss double"
+          DO i=1,lnnds
+             WRITE(10,fmt)(field_val_ql(i)) ! ql
+          END DO
+       END IF
+    END IF
+    IF (fault .AND. lm_str==1) THEN
+       WRITE(10,'(A)')"VECTORS ss double"
        fmt="(3(E10.4,1X))"
-       select case(dmn)
-       case(2)
-          do i=1,lnnds
+       SELECT CASE(dmn)
+       CASE(2)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_ss(j1-1),field_val_ss(j1),f0/) ! 2D U
-          end do
-       case(3)
-          do i=1,lnnds
+             WRITE(10,fmt)(/field_val_ss(j1-1),field_val_ss(j1),f0/) ! 2D U
+          END DO
+       CASE(3)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_ss(j1-2),field_val_ss(j1-1),             &
+             WRITE(10,fmt)(/field_val_ss(j1-2),field_val_ss(j1-1),             &
                 field_val_ss(j1)/) ! 3D U
-          end do
-       end select
-       write(10,'(A)')"VECTORS sh double"
+          END DO
+       END SELECT
+       WRITE(10,'(A)')"VECTORS sh double"
        fmt="(3(E10.4,1X))"
-       select case(dmn)
-       case(2)
-          do i=1,lnnds
+       SELECT CASE(dmn)
+       CASE(2)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_sh(j1-1),field_val_sh(j1),f0/) ! 2D U
-          end do
-       case(3)
-          do i=1,lnnds
+             WRITE(10,fmt)(/field_val_sh(j1-1),field_val_sh(j1),f0/) ! 2D U
+          END DO
+       CASE(3)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_sh(j1-2),field_val_sh(j1-1),             &
+             WRITE(10,fmt)(/field_val_sh(j1-2),field_val_sh(j1-1),             &
                 field_val_sh(j1)/) ! 3D U
-          end do
-       end select
-    end if
-    if (nceqs>0) then
-       do j3=1,dmn
-          if (j3==1) then
-             write(10,'(A)')"SCALARS fls double"
-             write(10,'(A)')"LOOKUP_TABLE default"
+          END DO
+       END SELECT
+    END IF
+    IF (nceqs>0) THEN
+       DO j3=1,dmn
+          IF (j3==1) THEN
+             WRITE(10,'(A)')"SCALARS fls double"
+             WRITE(10,'(A)')"LOOKUP_TABLE default"
              fmt="(1(F0.3,1X))"
-             do i=1,lnnds
+             DO i=1,lnnds
                 j1=i*dmn-dmn+j3
-                write(10,fmt)(field_val_flc(j1))
-             end do
-          elseif(j3==2) then
-             if (dmn==2) then
-                write(10,'(A)')"SCALARS fln double"
-             else
-                write(10,'(A)')"SCALARS fld double"
-             end if
-             write(10,'(A)')"LOOKUP_TABLE default"
+                WRITE(10,fmt)(field_val_flc(j1))
+             END DO
+          ELSEIF(j3==2) THEN
+             IF (dmn==2) THEN
+                WRITE(10,'(A)')"SCALARS fln double"
+             ELSE
+                WRITE(10,'(A)')"SCALARS fld double"
+             END IF
+             WRITE(10,'(A)')"LOOKUP_TABLE default"
              fmt="(1(F0.3,1X))"
-             do i=1,lnnds
+             DO i=1,lnnds
                 j1=i*dmn-dmn+j3
-                write(10,fmt)(field_val_flc(j1))
-             end do
-          elseif(j3==3) then
-             write(10,'(A)')"SCALARS fln double"
-             write(10,'(A)')"LOOKUP_TABLE default"
+                WRITE(10,fmt)(field_val_flc(j1))
+             END DO
+          ELSEIF(j3==3) THEN
+             WRITE(10,'(A)')"SCALARS fln double"
+             WRITE(10,'(A)')"LOOKUP_TABLE default"
              fmt="(1(F0.3,1X))"
-             do i=1,lnnds
+             DO i=1,lnnds
                 j1=i*dmn-dmn+j3
-                write(10,fmt)(field_val_flc(j1))
-             end do
-          end if
-       end do
-       write(10,'(A)')"VECTORS fl double"
+                WRITE(10,fmt)(field_val_flc(j1))
+             END DO
+          END IF
+       END DO
+       WRITE(10,'(A)')"VECTORS fl double"
        fmt="(3(F0.6,1X))"
-       select case(dmn)
-       case(2)
-          do i=1,lnnds
+       SELECT CASE(dmn)
+       CASE(2)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_fl(j1-1),field_val_fl(j1),f0/) ! 2D U
-          end do
-       case(3)
-          do i=1,lnnds
+             WRITE(10,fmt)(/field_val_fl(j1-1),field_val_fl(j1),f0/) ! 2D U
+          END DO
+       CASE(3)
+          DO i=1,lnnds
              j1=i*j2
-             write(10,fmt)(/field_val_fl(j1-2),field_val_fl(j1-1),             &
+             WRITE(10,fmt)(/field_val_fl(j1-2),field_val_fl(j1-1),             &
                 field_val_fl(j1)/) ! 3D U
-          end do
-       end select
-    end if
-    write(10,'(A)')"VECTORS displacements double"
+          END DO
+       END SELECT
+    END IF
+    WRITE(10,'(A)')"VECTORS displacements double"
     fmt="(3(F0.6,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
           j1=i*j-p
-          write(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
-       end do
-    case(3)
-       do i=1,lnnds
+          WRITE(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
+       END DO
+    CASE(3)
+       DO i=1,lnnds
           j1=i*j-p
-          write(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
-       end do
-    end select
-    close(10); k=k+1
-  end subroutine WriteOutput_x
+          WRITE(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
+       END DO
+    END SELECT
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_x
 
   ! Write out deformation and (absolute) Coulomb force due 
   !to pore pressure initialization
-  subroutine WriteOutput_init
-    implicit none
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer :: i,j,j1,j2,lnnds,lnels
-    real(8),pointer :: field_val(:),field_val_flc(:)
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,I0,A,A,A)')trim(name0),rank,"_",trim(name1),"_init.vtk"
-    open(10,file=adjustl(name),status='replace')
-    lnnds=size(coords,1)
-    lnels=size(nodes,1)
-    write(10,'(A)')"# vtk DataFile Version 2.0"
-    write(10,'(A)')"File written by Defmod-dev"
-    write(10,'(A)')"ASCII"
-    write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
-    write(10,'(A,I0,A)')"POINTS ",lnnds," double"
+  SUBROUTINE WriteOutput_init
+    IMPLICIT NONE
+    CHARACTER(64) :: fmt
+    CHARACTER(256) :: name,name0,name1
+    INTEGER :: i,j,j1,j2,lnnds,lnels
+    REAL(8),POINTER :: field_val(:),field_val_flc(:)
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,I0,A,A,A)')TRIM(name0),rank,"_",TRIM(name1),"_init.vtk"
+    OPEN(10,file=ADJUSTL(name),status='replace')
+    lnnds=SIZE(coords,1)
+    lnels=SIZE(nodes,1)
+    WRITE(10,'(A)')"# vtk DataFile Version 2.0"
+    WRITE(10,'(A)')"File written by Defmod-dev"
+    WRITE(10,'(A)')"ASCII"
+    WRITE(10,'(A)')"DATASET UNSTRUCTURED_GRID"
+    WRITE(10,'(A,I0,A)')"POINTS ",lnnds," double"
     fmt="(3(F0.3,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m),f0/)
-       end do
-    case(3)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m)/)
-       end do
-    end select
-    write(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
-    select case(npel)
-    case(3); fmt="(I0,3(1X,I0))"
-    case(4); fmt="(I0,4(1X,I0))"
-    case(8); fmt="(I0,8(1X,I0))"
-    end select
-    do i=1,lnels
-       write(10,fmt)npel,nodes(i,:)-1
-    end do
-    write(10,'(A,I0)')"CELL_TYPES ",lnels
-    do i=1,lnels
-       write(10,'(I0)')vtkid
-    end do
-    write(10,'(A,I0)')"POINT_DATA ",lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m),f0/)
+       END DO
+    CASE(3)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m)/)
+       END DO
+    END SELECT
+    WRITE(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
+    SELECT CASE(npel)
+    CASE(3); fmt="(I0,3(1X,I0))"
+    CASE(4); fmt="(I0,4(1X,I0))"
+    CASE(8); fmt="(I0,8(1X,I0))"
+    END SELECT
+    DO i=1,lnels
+       WRITE(10,fmt)npel,nodes(i,:)-1
+    END DO
+    WRITE(10,'(A,I0)')"CELL_TYPES ",lnels
+    DO i=1,lnels
+       WRITE(10,'(I0)')vtkid
+    END DO
+    WRITE(10,'(A,I0)')"POINT_DATA ",lnnds
     j=dmn+1
     field_val=>uu; field_val_flc=>flc
-    write(10,'(A)')"SCALARS pressure double"
-    write(10,'(A)')"LOOKUP_TABLE default"
+    WRITE(10,'(A)')"SCALARS pressure double"
+    WRITE(10,'(A)')"LOOKUP_TABLE default"
     fmt="(1(F0.3,1X))"
-    do i=1,lnnds
+    DO i=1,lnnds
        j1=i*j
-       write(10,fmt)(scale*field_val(j1)) ! Pr
-    end do
-    if (fault .and. nfnd>0) then    
-       do j2=1,dmn
-          if (j2==1) then
-             write(10,'(A)')"SCALARS fls double"
-             write(10,'(A)')"LOOKUP_TABLE default"
+       WRITE(10,fmt)(scale*field_val(j1)) ! Pr
+    END DO
+    IF (fault .AND. nfnd>0) THEN    
+       DO j2=1,dmn
+          IF (j2==1) THEN
+             WRITE(10,'(A)')"SCALARS fls double"
+             WRITE(10,'(A)')"LOOKUP_TABLE default"
              fmt="(1(F0.3,1X))"
-             do i=1,lnnds
+             DO i=1,lnnds
                 j1=i*dmn-dmn+j2
-                write(10,fmt)(field_val_flc(j1))
-             end do
-          elseif(j2==2) then
-             if (dmn==2) then
-                write(10,'(A)')"SCALARS fln double"
-             else
-                write(10,'(A)')"SCALARS fld double"
-             end if
-             write(10,'(A)')"LOOKUP_TABLE default"
+                WRITE(10,fmt)(field_val_flc(j1))
+             END DO
+          ELSEIF(j2==2) THEN
+             IF (dmn==2) THEN
+                WRITE(10,'(A)')"SCALARS fln double"
+             ELSE
+                WRITE(10,'(A)')"SCALARS fld double"
+             END IF
+             WRITE(10,'(A)')"LOOKUP_TABLE default"
              fmt="(1(F0.3,1X))"
-             do i=1,lnnds
+             DO i=1,lnnds
                 j1=i*dmn-dmn+j2
-                write(10,fmt)(field_val_flc(j1))
-             end do
-          elseif(j2==3) then
-             write(10,'(A)')"SCALARS fln double"
-             write(10,'(A)')"LOOKUP_TABLE default"
+                WRITE(10,fmt)(field_val_flc(j1))
+             END DO
+          ELSEIF(j2==3) THEN
+             WRITE(10,'(A)')"SCALARS fln double"
+             WRITE(10,'(A)')"LOOKUP_TABLE default"
              fmt="(1(F0.3,1X))"
-             do i=1,lnnds
+             DO i=1,lnnds
                 j1=i*dmn-dmn+j2
-                write(10,fmt)(field_val_flc(j1))
-             end do
-          end if
-       end do
-    end if
-    write(10,'(A)')"VECTORS displacements double"
+                WRITE(10,fmt)(field_val_flc(j1))
+             END DO
+          END IF
+       END DO
+    END IF
+    WRITE(10,'(A)')"VECTORS displacements double"
     fmt="(3(F0.6,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
           j1=i*j-p
-          write(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
-       end do
-    case(3)
-       do i=1,lnnds
+          WRITE(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
+       END DO
+    CASE(3)
+       DO i=1,lnnds
           j1=i*j-p
-          write(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
-       end do
-    end select
-    close(10); k=k+1
-  end subroutine WriteOutput_init
+          WRITE(10,fmt)(/field_val(j1-2),field_val(j1-1),field_val(j1)/) ! 3D U
+       END DO
+    END SELECT
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_init
 
   ! Write out force to stress ratio on fault f2s
-  subroutine WriteOutput_f2s
-    implicit none
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer :: i,j,j1,lnnds,lnels
-    real(8),pointer :: field_val(:),field_val_dip(:),field_val_nrm(:)
+  SUBROUTINE WriteOutput_f2s
+    IMPLICIT NONE
+    CHARACTER(64) :: fmt
+    CHARACTER(256) :: name,name0,name1
+    INTEGER :: i,j,j1,lnnds,lnels
+    REAL(8),POINTER :: field_val(:),field_val_dip(:),field_val_nrm(:)
     field_val=>f2s; field_val_dip=>dip; field_val_nrm=>nrm
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,I0,A,A,A)')trim(name0),rank,"_",trim(name1),"_f2s.vtk"
-    open(10,file=adjustl(name),status='replace')
-    lnnds=size(coords,1)
-    lnels=size(nodes,1)
-    write(10,'(A)')"# vtk DataFile Version 2.0"
-    write(10,'(A)')"File written by Defmod-dev"
-    write(10,'(A)')"ASCII"
-    write(10,'(A)')"DATASET UNSTRUCTURED_GRID"
-    write(10,'(A,I0,A)')"POINTS ",lnnds," double"
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,I0,A,A,A)')TRIM(name0),rank,"_",TRIM(name1),"_f2s.vtk"
+    OPEN(10,file=ADJUSTL(name),status='replace')
+    lnnds=SIZE(coords,1)
+    lnels=SIZE(nodes,1)
+    WRITE(10,'(A)')"# vtk DataFile Version 2.0"
+    WRITE(10,'(A)')"File written by Defmod-dev"
+    WRITE(10,'(A)')"ASCII"
+    WRITE(10,'(A)')"DATASET UNSTRUCTURED_GRID"
+    WRITE(10,'(A,I0,A)')"POINTS ",lnnds," double"
     fmt="(3(F0.3,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m),f0/)
-       end do
-    case(3)
-       do i=1,lnnds
-          write(10,fmt)(/(coords(i,:)/km2m)/)
-       end do
-    end select
-    write(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
-    select case(npel)
-    case(3); fmt="(I0,3(1X,I0))"
-    case(4); fmt="(I0,4(1X,I0))"
-    case(8); fmt="(I0,8(1X,I0))"
-    end select
-    do i=1,lnels
-       write(10,fmt)npel,nodes(i,:)-1
-    end do
-    write(10,'(A,I0)')"CELL_TYPES ",lnels
-    do i=1,lnels
-       write(10,'(I0)')vtkid
-    end do
-    write(10,'(A,I0)')"POINT_DATA ",lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m),f0/)
+       END DO
+    CASE(3)
+       DO i=1,lnnds
+          WRITE(10,fmt)(/(coords(i,:)/km2m)/)
+       END DO
+    END SELECT
+    WRITE(10,'(A,I0,1X,I0)')"CELLS ",lnels,lnels*(npel+1)
+    SELECT CASE(npel)
+    CASE(3); fmt="(I0,3(1X,I0))"
+    CASE(4); fmt="(I0,4(1X,I0))"
+    CASE(8); fmt="(I0,8(1X,I0))"
+    END SELECT
+    DO i=1,lnels
+       WRITE(10,fmt)npel,nodes(i,:)-1
+    END DO
+    WRITE(10,'(A,I0)')"CELL_TYPES ",lnels
+    DO i=1,lnels
+       WRITE(10,'(I0)')vtkid
+    END DO
+    WRITE(10,'(A,I0)')"POINT_DATA ",lnnds
     j=dmn
     ! Write force to stress ratio
-    if (nceqs>0) then
-       write(10,'(A)')"VECTORS f2s double"
+    IF (nceqs>0) THEN
+       WRITE(10,'(A)')"VECTORS f2s double"
        fmt="(3(F0.6,1X))"
-       select case(dmn)
-       case(2)
-          do i=1,lnnds
+       SELECT CASE(dmn)
+       CASE(2)
+          DO i=1,lnnds
              j1=i*j
-             write(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
-          end do
-       case(3)
-          do i=1,lnnds
+             WRITE(10,fmt)(/field_val(j1-1),field_val(j1),f0/) ! 2D U
+          END DO
+       CASE(3)
+          DO i=1,lnnds
              j1=i*j
-             write(10,fmt)(/field_val(j1-2),field_val(j1-1),                   &
+             WRITE(10,fmt)(/field_val(j1-2),field_val(j1-1),                   &
                 field_val(j1)/) ! 3D U
-          end do
-       end select
-    end if
+          END DO
+       END SELECT
+    END IF
     ! Write fault's dip (strike for 2D) and normal vectors
-    select case(dmn)
-    case(2)
-       write(10,'(A)')"VECTORS strk double"
-    case(3)
-       write(10,'(A)')"VECTORS dip double"
-    end select
+    SELECT CASE(dmn)
+    CASE(2)
+       WRITE(10,'(A)')"VECTORS strk double"
+    CASE(3)
+       WRITE(10,'(A)')"VECTORS dip double"
+    END SELECT
     fmt="(3(F0.6,1X))"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
           j1=i*j
-          write(10,fmt)(/field_val_dip(j1-1),field_val_dip(j1),f0/) ! 2D U
-       end do
-    case(3)
-       do i=1,lnnds
+          WRITE(10,fmt)(/field_val_dip(j1-1),field_val_dip(j1),f0/) ! 2D U
+       END DO
+    CASE(3)
+       DO i=1,lnnds
           j1=i*j
-          write(10,fmt)(/field_val_dip(j1-2),field_val_dip(j1-1),              &
+          WRITE(10,fmt)(/field_val_dip(j1-2),field_val_dip(j1-1),              &
              field_val_dip(j1)/) ! 3D U
-       end do
-    end select
-    write(10,'(A)')"VECTORS nrm double"
-    select case(dmn)
-    case(2)
-       do i=1,lnnds
+       END DO
+    END SELECT
+    WRITE(10,'(A)')"VECTORS nrm double"
+    SELECT CASE(dmn)
+    CASE(2)
+       DO i=1,lnnds
           j1=i*j
-          write(10,fmt)(/field_val_nrm(j1-1),field_val_nrm(j1),f0/) ! 2D U
-       end do
-    case(3)
-       do i=1,lnnds
+          WRITE(10,fmt)(/field_val_nrm(j1-1),field_val_nrm(j1),f0/) ! 2D U
+       END DO
+    CASE(3)
+       DO i=1,lnnds
           j1=i*j
-          write(10,fmt)(/field_val_nrm(j1-2),field_val_nrm(j1-1),              &
+          WRITE(10,fmt)(/field_val_nrm(j1-2),field_val_nrm(j1-1),              &
              field_val_nrm(j1)/) ! 3D U
-       end do
-    end select
-    close(10)
-  end subroutine WriteOutput_f2s
+       END DO
+    END SELECT
+    CLOSE(10)
+  END SUBROUTINE WriteOutput_f2s
 
   ! Output observations
-  subroutine WriteOutput_obs
-    implicit none
-    integer :: i,j
-    character(64) :: fmt
-    character(256) :: name,name0,name1
-    integer,save :: k=0,k_dyn=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    if (dyn) then
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,           &
+  SUBROUTINE WriteOutput_obs
+    IMPLICIT NONE
+    INTEGER :: i,j
+    CHARACTER(64) :: fmt
+    CHARACTER(256) :: name,name0,name1
+    INTEGER,SAVE :: k=0,k_dyn=0
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    IF (dyn) THEN
+       WRITE(name,'(A,A,A,I0.6,A)')TRIM(name0),TRIM(name1),"_",rank,           &
           "_dyn_obs.txt"
        j=k_dyn
-    else
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_obs.txt"
+    ELSE
+       WRITE(name,'(A,A,A,I0.6,A)')TRIM(name0),TRIM(name1),"_",rank,"_obs.txt"
        j=k
-    end if
-    if (j==0) then
-       open(10,file=adjustl(name),status='replace')
-       select case(dmn)
-       case(2); fmt="(2(F0.3,1X),I0)"
-       case(3); fmt="(3(F0.3,1X),I0)"
-       end select
-       write(10,"(I0)")nobs_loc
-       do i=1,nobs_loc
-          write(10,fmt)ocoord_loc(i,:),ol2g(i)
-       end do
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    if (dyn) then
-       select case(dmn)
-          case(2); fmt="(2(F0.6,1X))"
-          case(3); fmt="(3(F0.6,1X))"
-       end select
-    else
-       select case(dmn)
-       case(2)
-          if (poro) then
+    END IF
+    IF (j==0) THEN
+       OPEN(10,file=ADJUSTL(name),status='replace')
+       SELECT CASE(dmn)
+       CASE(2); fmt="(2(F0.3,1X),I0)"
+       CASE(3); fmt="(3(F0.3,1X),I0)"
+       END SELECT
+       WRITE(10,"(I0)")nobs_loc
+       DO i=1,nobs_loc
+          WRITE(10,fmt)ocoord_loc(i,:),ol2g(i)
+       END DO
+    ELSE
+       OPEN(10,file=ADJUSTL(name),status='old',position='append',action='write')
+    END IF
+    IF (dyn) THEN
+       SELECT CASE(dmn)
+          CASE(2); fmt="(2(F0.6,1X))"
+          CASE(3); fmt="(3(F0.6,1X))"
+       END SELECT
+    ELSE
+       SELECT CASE(dmn)
+       CASE(2)
+          IF (poro) THEN
              fmt="(3(F0.6,1X))"
-          else
+          ELSE
              fmt="(2(F0.6,1X))"
-          end if
-       case(3)
-          if (poro) then
+          END IF
+       CASE(3)
+          IF (poro) THEN
              fmt="(4(F0.6,1X))"
-          else
+          ELSE
              fmt="(3(F0.6,1X))"
-          end if
-       end select
-    end if
-    do i=1,nobs_loc
-       if (dyn) then
-          if (dsp_hyb==1) then
-             write(10,fmt)tot_uu_dyn_obs(i,:)
-          else
-            write(10,fmt)uu_dyn_obs(i,:)
-          end if
-       else
-          if (dsp==1) then
-             write(10,fmt)tot_uu_obs(i,:)
-          else
-             write(10,fmt)uu_obs(i,:)
-          end if
-       end if
-    end do
-    close(10) 
-    if (dyn) then
+          END IF
+       END SELECT
+    END IF
+    DO i=1,nobs_loc
+       IF (dyn) THEN
+          IF (dsp_hyb==1) THEN
+             WRITE(10,fmt)tot_uu_dyn_obs(i,:)
+          ELSE
+            WRITE(10,fmt)uu_dyn_obs(i,:)
+          END IF
+       ELSE
+          IF (dsp==1) THEN
+             WRITE(10,fmt)tot_uu_obs(i,:)
+          ELSE
+             WRITE(10,fmt)uu_obs(i,:)
+          END IF
+       END IF
+    END DO
+    CLOSE(10) 
+    IF (dyn) THEN
        k_dyn=k_dyn+1
-    else
+    ELSE
        k=k+1
-    end if
-  end subroutine WriteOutput_obs
+    END IF
+  END SUBROUTINE WriteOutput_obs
 
   ! Write event log file for quasi-static data
-  subroutine WriteOutput_log
-    implicit none
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    integer :: seis
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),".log"
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       write(10,"(F0.6)")dt
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    if (crp) then
+  SUBROUTINE WriteOutput_log
+    IMPLICIT NONE
+    CHARACTER(256) :: name,name0,name1
+    INTEGER,SAVE :: k=0
+    INTEGER :: seis
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,A,A)')TRIM(name0),TRIM(name1),".log"
+    IF (k==0) THEN
+       OPEN(10,file=ADJUSTL(name),status='replace')
+       WRITE(10,"(F0.6)")dt
+    ELSE
+       OPEN(10,file=ADJUSTL(name),status='old',position='append',action='write')
+    END IF
+    IF (crp) THEN
        seis=0
-    else
+    ELSE
        seis=1
-    end if
-    write(10,"(2(I0X))")n_log,seis
-    close(10); k=k+1
-  end subroutine WriteOutput_log
+    END IF
+    WRITE(10,"(2(I0X))")n_log,seis
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_log
 
   ! Write event log file for seismic data
-  subroutine WriteOutput_log_wave
-    implicit none
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),"_dyn.log"
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       if (gf) then
-          write(10,"(F0.6)")dt*frq_wave
-       else
-          write(10,"(F0.6)")dt_dyn*frq_wave
-       end if
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    write(10,"(I0)")n_log_wave
-    close(10); k=k+1
-  end subroutine WriteOutput_log_wave
+  SUBROUTINE WriteOutput_log_wave
+    IMPLICIT NONE
+    CHARACTER(256) :: name,name0,name1
+    INTEGER,SAVE :: k=0
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,A,A)')TRIM(name0),TRIM(name1),"_dyn.log"
+    IF (k==0) THEN
+       OPEN(10,file=ADJUSTL(name),status='replace')
+       IF (gf) THEN
+          WRITE(10,"(F0.6)")dt*frq_wave
+       ELSE
+          WRITE(10,"(F0.6)")dt_dyn*frq_wave
+       END IF
+    ELSE
+       OPEN(10,file=ADJUSTL(name),status='old',position='append',action='write')
+    END IF
+    WRITE(10,"(I0)")n_log_wave
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_log_wave
 
   ! Write event log file for seismic data
-  subroutine WriteOutput_log_slip
-    implicit none
-    character(256) :: name,name0,name1
-    integer,save :: k=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),"_slip.log"
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       write(10,"(F0.6)")dt_dyn*frq_slip
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    write(10,"(I0)")n_log_slip
-    close(10); k=k+1
-  end subroutine WriteOutput_log_slip
+  SUBROUTINE WriteOutput_log_slip
+    IMPLICIT NONE
+    CHARACTER(256) :: name,name0,name1
+    INTEGER,SAVE :: k=0
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,A,A)')TRIM(name0),TRIM(name1),"_slip.log"
+    IF (k==0) THEN
+       OPEN(10,file=ADJUSTL(name),status='replace')
+       WRITE(10,"(F0.6)")dt_dyn*frq_slip
+    ELSE
+       OPEN(10,file=ADJUSTL(name),status='old',position='append',action='write')
+    END IF
+    WRITE(10,"(I0)")n_log_slip
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_log_slip
 
   ! Write temporal fault slip (and theta for rate state friction) 
-  subroutine WriteOutput_slip
-    implicit none
+  SUBROUTINE WriteOutput_slip
+    IMPLICIT NONE
 #include "petsc.h"
-    character(256) :: name,name0,name1
-    character(64) :: fmt
-    integer :: j,j1,j2,j3,rw_loc(dmn) 
-    integer,save :: k=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    if (nfnd_loc>0) then ! Has on rank fault nodes
-       write(name,'(A,A,A,I0.6,A)')trim(name0),trim(name1),"_",rank,"_slip.txt"
-       if (rsf<1) then
-          select case(dmn)
-             case(2); fmt="(2(ES11.2E3,X))"
-             case(3); fmt="(3(ES11.2E3,X))"
-          end select
-       else
-          select case(dmn)
-             case(2); fmt="(2(ES11.2E3,X),E12.4)"
-             case(3); fmt="(3(ES11.2E3,X),E12.4)"
-          end select
-       end if
-       if (k==0) then
-          open(10,file=adjustl(name),status='replace')
-          write(10,'(I0)')nfnd_loc!n_lmnd-max(0,(nceqs_ncf/(dmn+p)-lmnd0))
-          do j1=1,nfnd_loc
+    CHARACTER(256) :: name,name0,name1
+    CHARACTER(64) :: fmt
+    INTEGER :: j,j1,j2,j3,rw_loc(dmn) 
+    INTEGER,SAVE :: k=0
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    IF (nfnd_loc>0) THEN ! Has on rank fault nodes
+       WRITE(name,'(A,A,A,I0.6,A)')TRIM(name0),TRIM(name1),"_",rank,"_slip.txt"
+       IF (rsf<1) THEN
+          SELECT CASE(dmn)
+             CASE(2); fmt="(2(ES11.2E3,X))"
+             CASE(3); fmt="(3(ES11.2E3,X))"
+          END SELECT
+       ELSE
+          SELECT CASE(dmn)
+             CASE(2); fmt="(2(ES11.2E3,X),E12.4)"
+             CASE(3); fmt="(3(ES11.2E3,X),E12.4)"
+          END SELECT
+       END IF
+       IF (k==0) THEN
+          OPEN(10,file=ADJUSTL(name),status='replace')
+          WRITE(10,'(I0)')nfnd_loc!n_lmnd-max(0,(nceqs_ncf/(dmn+p)-lmnd0))
+          DO j1=1,nfnd_loc
              j3=FltMap(j1,2) 
-             select case(dmn)
-                case(2); write(10,'(2(F0.3,X),I0)')xfnd(j3,:),j3
-                case(3); write(10,'(3(F0.3,X),I0)')xfnd(j3,:),j3
-             end select
-          end do
-       else
-          open(10,file=adjustl(name),status='old',position='append',action=    &
+             SELECT CASE(dmn)
+                CASE(2); WRITE(10,'(2(F0.3,X),I0)')xfnd(j3,:),j3
+                CASE(3); WRITE(10,'(3(F0.3,X),I0)')xfnd(j3,:),j3
+             END SELECT
+          END DO
+       ELSE
+          OPEN(10,file=ADJUSTL(name),status='old',position='append',action=    &
              'write')
-       end if
-       if (rsf<1) then ! Slip weakening
-          do j1=1,nfnd_loc
+       END IF
+       IF (rsf<1) THEN ! Slip weakening
+          DO j1=1,nfnd_loc
              j=FltMap(j1,1); j3=FltMap(j1,2)
              rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-             if (dsp_hyb==1) then
-                 write(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3)
-             else
-                 write(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3)
-             end if
-          end do
-       else ! Rate and state friction
-          do j1=1,nfnd_loc
+             IF (dsp_hyb==1) THEN
+                 WRITE(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3)
+             ELSE
+                 WRITE(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3)
+             END IF
+          END DO
+       ELSE ! Rate and state friction
+          DO j1=1,nfnd_loc
              j=FltMap(j1,1); j3=FltMap(j1,2)
              rw_loc=(/((j-1)*dmn+j2,j2=1,dmn)/)
-             if (dsp_hyb==1) then 
-                write(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3),          &
+             IF (dsp_hyb==1) THEN 
+                WRITE(10,fmt)tot_flt_slip(rw_loc(:dmn-1)),mu_hyb(j3),          &
                    rsftheta(j3)
-             else
-                write(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3),    &
+             ELSE
+                WRITE(10,fmt)flt_slip(rw_loc(:dmn-1))/dt_dyn,mu_hyb(j3),    &
                    rsftheta(j3)
-             end if
-          end do
-       end if ! Constitutive models
-       close(10); k=k+1
-    end if ! Has on rank fault nodes
-  end subroutine WriteOutput_slip
+             END IF
+          END DO
+       END IF ! Constitutive models
+       CLOSE(10); k=k+1
+    END IF ! Has on rank fault nodes
+  END SUBROUTINE WriteOutput_slip
 
   ! Write qs fault data 
-  subroutine WriteOutput_flt_qs
-    implicit none
-    character(256) :: name,name0,name1
-    character(64) :: fmt
-    integer :: i
-    integer,save :: k=0
-    name0=output_file(:index(output_file,"/",BACK=.TRUE.))
-    name1=output_file(index(output_file,"/",BACK=.TRUE.)+1:)
-    write(name,'(A,A,A)')trim(name0),trim(name1),"_fqs.txt"
-    select case(dmn+p)
-       case(2); fmt="(2(F0.6,1X))"
-       case(3); fmt="(3(F0.6,1X))"
-       case(4); fmt="(4(F0.6,1X))"
-    end select
-    if (k==0) then
-       open(10,file=adjustl(name),status='replace')
-       write(10,'(I0)')sum(frc)
-       do i=1,nfnd
-          if (frc(i)>0) then
-             select case(dmn)
-                case(2); write(10,'(2(F0.3,1X))')xfnd(i,:)
-                case(3); write(10,'(3(F0.3,1X))')xfnd(i,:)
-             end select
-          end if
-       end do
-    else
-       open(10,file=adjustl(name),status='old',position='append',action='write')
-    end if
-    do i=1,nfnd
-       if (frc(i)>0) then
-          if (poro) then
-             write(10,fmt)flt_ss(i,:),flt_p(i)
-          else
-             write(10,fmt)flt_ss(i,:)
-          end if
-       end if
-    end do
-    close(10); k=k+1
-  end subroutine WriteOutput_flt_qs
+  SUBROUTINE WriteOutput_flt_qs
+    IMPLICIT NONE
+    CHARACTER(256) :: name,name0,name1
+    CHARACTER(64) :: fmt
+    INTEGER :: i
+    INTEGER,SAVE :: k=0
+    name0=output_file(:INDEX(output_file,"/",BACK=.TRUE.))
+    name1=output_file(INDEX(output_file,"/",BACK=.TRUE.)+1:)
+    WRITE(name,'(A,A,A)')TRIM(name0),TRIM(name1),"_fqs.txt"
+    SELECT CASE(dmn+p)
+       CASE(2); fmt="(2(F0.6,1X))"
+       CASE(3); fmt="(3(F0.6,1X))"
+       CASE(4); fmt="(4(F0.6,1X))"
+    END SELECT
+    IF (k==0) THEN
+       OPEN(10,file=ADJUSTL(name),status='replace')
+       WRITE(10,'(I0)')SUM(frc)
+       DO i=1,nfnd
+          IF (frc(i)>0) THEN
+             SELECT CASE(dmn)
+                CASE(2); WRITE(10,'(2(F0.3,1X))')xfnd(i,:)
+                CASE(3); WRITE(10,'(3(F0.3,1X))')xfnd(i,:)
+             END SELECT
+          END IF
+       END DO
+    ELSE
+       OPEN(10,file=ADJUSTL(name),status='old',position='append',action='write')
+    END IF
+    DO i=1,nfnd
+       IF (frc(i)>0) THEN
+          IF (poro) THEN
+             WRITE(10,fmt)flt_ss(i,:),flt_p(i)
+          ELSE
+             WRITE(10,fmt)flt_ss(i,:)
+          END IF
+       END IF
+    END DO
+    CLOSE(10); k=k+1
+  END SUBROUTINE WriteOutput_flt_qs
 
-end module global
+END MODULE global

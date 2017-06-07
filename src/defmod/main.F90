@@ -1,27 +1,27 @@
 ! Copyright (C) 2010-2015 ../AUTHORS. All rights reserved.
 ! This file is part of Defmod. See ../COPYING for license information.
 
-program main
+PROGRAM main
 
 #include <petscversion.h>
 
-  use global
-  use FD2FE
-  implicit none
+  USE global
+  USE FD2FE
+  IMPLICIT NONE
 #include "petsc.h"
-  character(256) :: input_file,viz,fd
-  logical :: l,v,w
-  integer,pointer :: null_i=>null()
-  real(8),pointer :: null_r=>null()
-  real(8) :: fdt
-  integer :: i,j,j1,j2,j3,j4,j5,j6,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
+  CHARACTER(256) :: input_file,viz,fd
+  LOGICAL :: l,v,w
+  INTEGER,POINTER :: null_i=>null()
+  REAL(8),POINTER :: null_r=>null()
+  REAL(8) :: fdt
+  INTEGER :: i,j,j1,j2,j3,j4,j5,j6,n,n_dyn,nodal_bw,ef_eldof,ng,vout,fdout
 
   ! Petsc Meshing/DMDA Stuff
   DM        :: dm
   Vec       :: Vec_Coordinates
-  character(256) :: exofile
-  integer   :: Int_elem, coord_len
-  real(kind=8), allocatable :: PETSc_coords(:,:), PETSc_coords_array(:)
+  CHARACTER(256) :: exofile
+  INTEGER   :: Int_elem, coord_len
+  REAL(kind=8), ALLOCATABLE :: PETSc_coords(:,:), PETSc_coords_array(:)
   PetscBool :: interpolate,em
   REAL(8),POINTER :: PETSc_pntr(:)  
   ! Global Vectors
@@ -34,63 +34,63 @@ program main
   PetscViewer :: H5Viewer,ASCIIViewer
   
 !-----------------------------------------------------------------------------80  
-  call PetscInitialize(Petsc_Null_Character,ierr)
-  call MPI_Comm_Rank(MPI_Comm_World,rank,ierr)
-  call MPI_Comm_Size(MPI_Comm_World,nprcs,ierr)
+  CALL PetscInitialize(Petsc_Null_Character,ierr)
+  CALL MPI_Comm_Rank(MPI_Comm_World,rank,ierr)
+  CALL MPI_Comm_Size(MPI_Comm_World,nprcs,ierr)
 
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=6)
-  call PetscOptionsGetString(Petsc_Null_Character,'-f',input_file,l,ierr)
-  call PetscOptionsGetString(Petsc_Null_Character,'-ss',viz,v,ierr)
-  call PetscOptionsGetString(Petsc_Null_Character,'-fd',fd,w,ierr)
+  CALL PetscOptionsGetString(Petsc_Null_Character,'-f',input_file,l,ierr)
+  CALL PetscOptionsGetString(Petsc_Null_Character,'-ss',viz,v,ierr)
+  CALL PetscOptionsGetString(Petsc_Null_Character,'-fd',fd,w,ierr)
   ! Flag to load .exo directly
   CALL PetscOptionsGetString(Petsc_Null_Character,'-m',exofile,em,ierr)    
   
 #else
-  call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-f',      &
+  CALL PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-f',      &
      input_file,l,ierr)
-  call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-ss',     &
+  CALL PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-ss',     &
      viz,v,ierr)
-  call PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-fd',     &
+  CALL PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-fd',     &
      fd,w,ierr)
   ! Flag to load .exo directly     
   CALL PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-m' ,     &
        exofile,em,ierr)     
 #endif
-  if (.not. l) then
-     call PrintMsg("Usage: [mpiexec -n <np>] defmod -f <input_filename>")
+  IF (.NOT. l) THEN
+     CALL PrintMsg("Usage: [mpiexec -n <np>] defmod -f <input_filename>")
      go to 9
-  end if
+  END IF
   vout=0
-  if (v) then
-     read (viz,'(I1.0)')vout 
-     if (vout==1) then 
-        call PrintMsg("Snapshot output will slow the run!")
-     else
-        call PrintMsg("Chosen NOT to output snapshot.")
-     end if
-  else
-     call PrintMsg("Use -ss 1 to turn on the snapshot output.")
-  end if
+  IF (v) THEN
+     READ (viz,'(I1.0)')vout 
+     IF (vout==1) THEN 
+        CALL PrintMsg("Snapshot output will slow the run!")
+     ELSE
+        CALL PrintMsg("Chosen NOT to output snapshot.")
+     END IF
+  ELSE
+     CALL PrintMsg("Use -ss 1 to turn on the snapshot output.")
+  END IF
   fdout=0
-  if (w) then
-     read (fd,'(I1.0)')fdout
-     if (fdout==1) call PrintMsg("Runing in FE-FD mixed mode.")
-  else
-     call PrintMsg("Use -fd 1 to turn on FE-FD mixed mode.")
-  end if
+  IF (w) THEN
+     READ (fd,'(I1.0)')fdout
+     IF (fdout==1) CALL PrintMsg("Runing in FE-FD mixed mode.")
+  ELSE
+     CALL PrintMsg("Use -fd 1 to turn on FE-FD mixed mode.")
+  END IF
 
   ! Read input file parameters
-  open(10,file=input_file,status='old')
+  OPEN(10,file=input_file,status='old')
 
   ! Output file name is the same as the input
-  if (index(input_file,".inp")>0) then
-     output_file=input_file(1:index(input_file,".inp")-1)
-  else
+  IF (INDEX(input_file,".inp")>0) THEN
+     output_file=input_file(1:INDEX(input_file,".inp")-1)
+  ELSE
      output_file=input_file
-  end if
+  END IF
 
-  call PrintMsg("Reading input ...")
-  call ReadParameters
+  CALL PrintMsg("Reading input ...")
+  CALL ReadParameters
 
 
   !===========================================================================80
@@ -109,9 +109,9 @@ program main
     ! Deal with coords in FORTRAN Variables
     CALL PrintMsg('Converting to FORTRAN Variables')
     CALL DMGetDimension(dm,dmn,ierr)
-    print *, Int_elem, dmn
+    PRINT *, Int_elem, dmn
     coord_len = Int_elem/dmn
-    allocate( PETSc_coords(coord_len,dmn),PETSc_coords_array(Int_elem))
+    ALLOCATE( PETSc_coords(coord_len,dmn),PETSc_coords_array(Int_elem))
     CALL PrintMsg('Trying to read from Array')
     CALL VecGetArrayReadF90(Vec_Coordinates,PETSc_pntr,ierr)
     PETSc_coords_array=PETSc_pntr
@@ -130,419 +130,446 @@ program main
 !-----------------------------------------------------------------------------80
 
   ! Set element specific constants
-  call InitializeElement
+  CALL InitializeElement
   p=0; ef_eldof=eldof
-  if (poro) then
+  IF (poro) THEN
      p=1; ef_eldof=eldof+eldofp
-     if (eltype=="tri") nip=3; if (eltype=="tet") nip=4
-  elseif (fault) then
-     if (eltype=="tri") nip=3; if (eltype=="tet") nip=4
-  end if
+     IF (eltype=="tri") nip=3; IF (eltype=="tet") nip=4
+  ELSEIF (fault) THEN
+     IF (eltype=="tri") nip=3; IF (eltype=="tet") nip=4
+  END IF
 
   ! Partition mesh using METIS, create mappings, and read on-rank mesh data
-  allocate(npart(nnds),epart(nels)); epart=0; npart=0
-  if (nprcs>1) then
-     call PrintMsg("Partitioning mesh ...")
-     if (rank==0) then
-        allocate(nodes(1,npel*nels),work(nels+1)); work(1)=0
-        do i=1,nels
-           j=npel*(i-1)+1; n=npel*i; read(10,*)nodes(1,j:n); work(i+1)=n
-        end do
+  ALLOCATE(npart(nnds),epart(nels)); epart=0; npart=0
+  IF (nprcs>1) THEN
+     CALL PrintMsg("Partitioning mesh ...")
+     IF (rank==0) THEN
+        ALLOCATE(nodes(1,npel*nels),work(nels+1)); work(1)=0
+        DO i=1,nels
+           j=npel*(i-1)+1; n=npel*i; READ(10,*)nodes(1,j:n); work(i+1)=n
+        END DO
         nodes=nodes-1
-        call METIS_PartMeshNodal(nels,nnds,work,nodes,null_i,null_i,nprcs,     &
+        CALL METIS_PartMeshNodal(nels,nnds,work,nodes,null_i,null_i,nprcs,     &
            null_r,null_i,n,epart,npart)
         DEALLOCATE(nodes,work)
         ! Return to beginning of input file; read parameters in again
-        rewind(10); call ReadParameters
-     end if
-     call MPI_Bcast(npart,nnds,MPI_Integer,0,MPI_Comm_World,ierr)
-     call MPI_Bcast(epart,nels,MPI_Integer,0,MPI_Comm_World,ierr)
-  end if
-  call PrintMsg("Reading mesh data ...")
-  allocate(emap(nels),nmap(nnds)); emap=0; nmap=0
+        REWIND(10); CALL ReadParameters
+     END IF
+     CALL MPI_Bcast(npart,nnds,MPI_Integer,0,MPI_Comm_World,ierr)
+     CALL MPI_Bcast(epart,nels,MPI_Integer,0,MPI_Comm_World,ierr)
+  END IF
+  CALL PrintMsg("Reading mesh data ...")
+  ALLOCATE(emap(nels),nmap(nnds)); emap=0; nmap=0
   ! Create original to local element mappings and read on-rank element data
   j=1
-  do i=1,nels
-     if (epart(i)==rank) then
+  DO i=1,nels
+     IF (epart(i)==rank) THEN
         epart(i)=1; emap(i)=j; j=j+1
-     else
+     ELSE
         epart(i)=0
-     end if
-  end do
-  n=sum(epart); allocate(nodes(n,npel),id(n)) ! id -> mtrl flag
+     END IF
+  END DO
+  n=SUM(epart); ALLOCATE(nodes(n,npel),id(n)) ! id -> mtrl flag
   j=1
   ! Read nodes associated with element (sequentially), plus elemental
   ! material flag
-  do i=1,nels
-     if (epart(i)==1) then
-        read(10,*)nodes(j,:),id(j); j=j+1
-     else
-        read(10,*)val
-     end if
-  end do
+  DO i=1,nels
+     IF (epart(i)==1) THEN
+        READ(10,*)nodes(j,:),id(j); j=j+1
+     ELSE
+        READ(10,*)val
+     END IF
+  END DO
   nels=n
   ! Create original to global nodal mappings and read on-rank + ghost nodes
-  allocate(work(0:nprcs-1))
+  ALLOCATE(work(0:nprcs-1))
   j=0
-  do i=1,nnds
-     if (npart(i)==rank) j=j+1
-  end do
-  call MPI_AllGather(j,1,MPI_Integer,work,1,MPI_Integer,MPI_Comm_World,ierr)
-  if (rank==0) n=1
-  if (rank/=0) n=sum(work(0:rank-1))+1
-  do i=1,nnds
-     if (npart(i)==rank) then
+  DO i=1,nnds
+     IF (npart(i)==rank) j=j+1
+  END DO
+  CALL MPI_AllGather(j,1,MPI_Integer,work,1,MPI_Integer,MPI_Comm_World,ierr)
+  IF (rank==0) n=1
+  IF (rank/=0) n=SUM(work(0:rank-1))+1
+  DO i=1,nnds
+     IF (npart(i)==rank) THEN
         nmap(i)=n; n=n+1
-     end if
-  end do
-  deallocate(work)
-  allocate(work(nnds))
-  call MPI_AllReduce(nmap,work,nnds,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
+     END IF
+  END DO
+  DEALLOCATE(work)
+  ALLOCATE(work(nnds))
+  CALL MPI_AllReduce(nmap,work,nnds,MPI_Integer,MPI_Sum,MPI_Comm_World,ierr)
   nmap=work
   npart=0
-  do i=1,nels
-     do j=1,npel
+  DO i=1,nels
+     DO j=1,npel
         npart(nodes(i,j))=1
-     end do
-  end do
+     END DO
+  END DO
   j=1; work=0
-  do i=1,nnds
-     if (npart(i)==1) then
+  DO i=1,nnds
+     IF (npart(i)==1) THEN
         work(i)=j; j=j+1
-     end if
-  end do
-  n=sum(npart); allocate(coords(n,dmn),bc(n,dmn+p))
+     END IF
+  END DO
+  n=SUM(npart)
+  ! Flag to enable Specified Dirichlet Pressure (to be moved to input file)
+  DPFlag = 1 
+  !ALLOCATE(coords(n,dmn),bc(n,dmn+p))
+  ! BC row now includes specified pore pressure (hence the + 1)/rx_press 
+  ! variable
+  ALLOCATE(coords(n,dmn),bc(n,dmn+p),rx_press(n))
   j=1
   ! Read [sequentially] nodal coordinates and BC flags: x,y,z and/or p
   DO i=1,nnds
-     if (npart(i)==1) then
-        read(10,*)coords(j,:),bc(j,:); j=j+1
-     else
-        read(10,*)val
-     end if
-  end do
+     IF (npart(i)==1) THEN
+        IF (DPFlag==1) THEN
+           READ(10,*)coords(j,:),bc(j,:),rx_press(j); j=j+1
+        ELSE
+           READ(10,*)coords(j,:),bc(j,:); j=j+1
+        END IF
+     ELSE
+        READ(10,*)val
+     END IF
+  END DO
   coords=km2m*coords
   ! Re-number on-rank nodes and create local to global node and dof mappings
-  do i=1,nels
-     do j=1,npel
+  DO i=1,nels
+     DO j=1,npel
         nodes(i,j)=work(nodes(i,j))
-     end do
-  end do
-  n=sum(npart); allocate(nl2g(n,2),indxmap((dmn+p)*n,2))
-  if (fault) allocate(indxmap_u(dmn*n,2))
+     END DO
+  END DO
+  n=SUM(npart); ALLOCATE(nl2g(n,2),indxmap((dmn+p)*n,2))
+  IF (fault) ALLOCATE(indxmap_u(dmn*n,2))
   j=1
-  do i=1,nnds
-     if (work(i)==j) then
+  DO i=1,nnds
+     IF (work(i)==j) THEN
         nl2g(j,1)=j; nl2g(j,2)=nmap(i); j=j+1
-     end if
-  end do
-  do i=1,n
-     do j=1,dmn+p
+     END IF
+  END DO
+  DO i=1,n
+     DO j=1,dmn+p
         indxmap((dmn+p)*i-j+1,:)=(dmn+p)*nl2g(i,:)-j ! 0 based index
-     end do
-  end do
-  if (fault) then
-     do i=1,n
-        do j=1,dmn
+     END DO
+  END DO
+  IF (fault) THEN
+     DO i=1,n
+        DO j=1,dmn
            indxmap_u(dmn*i-j+1,:)=dmn*nl2g(i,:)-j
-        end do
-     end do
-  end if
-  deallocate(work)
+        END DO
+     END DO
+  END IF
+  DEALLOCATE(work)
   ! Read material data assuming nels >> nmts, i.e., all ranks store all data
-  if (fault) then
-     allocate(mat(nmts,5+4*p+init+2))
-  else
-     allocate(mat(nmts,5+4*p))
-  end if
-  do i=1,nmts
-     read(10,*)mat(i,:)
-  end do
-  deallocate(epart,npart)
+  IF (fault) THEN
+     ALLOCATE(mat(nmts,5+4*p+init+2))
+  ELSE
+     ALLOCATE(mat(nmts,5+4*p))
+  END IF
+  DO i=1,nmts
+     READ(10,*)mat(i,:)
+  END DO
+  DEALLOCATE(epart,npart)
 
   ! Initialize local element variables and global U
-  allocate(ipoint(nip,dmn),weight(nip),k(ef_eldof,ef_eldof),m(eldof,eldof),    &
+  ALLOCATE(ipoint(nip,dmn),weight(nip),k(ef_eldof,ef_eldof),m(eldof,eldof),    &
      f(ef_eldof),indx(ef_eldof),enodes(npel),ecoords(npel,dmn),vvec(dmn+p))
-  if (fault) allocate(k_dyn(eldof,eldof),indx_dyn(eldof))
-  call SamPts(ipoint,weight)
-  n=(dmn+p)*nnds; if (stype/="explicit") n=n+nceqs
-  call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n,Vec_U,ierr)
+  IF (fault) ALLOCATE(k_dyn(eldof,eldof),indx_dyn(eldof))
+  CALL SamPts(ipoint,weight)
+  n=(dmn+p)*nnds; IF (stype/="explicit") n=n+nceqs
+  CALL VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n,Vec_U,ierr)
   ! Global U for dynamic run
-  if (fault) then
+  IF (fault) THEN
      n_dyn=dmn*nnds
-     call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n_dyn,Vec_U_dyn,ierr)
-  end if
-  if (visco .or. (fault .and. lm_str==1)) allocate(stress(nels,nip,cdmn))
+     CALL VecCreateMPI(Petsc_Comm_World,Petsc_Decide,n_dyn,Vec_U_dyn,ierr)
+  END IF
+  IF (visco .OR. (fault .AND. lm_str==1)) ALLOCATE(stress(nels,nip,cdmn))
 
   ! Set scaling constants
-  wt=f2*exp((log(maxval(mat(:,1)))+log(minval(mat(:,1))))/f2)
-  if (dmn==3) wt=wt*km2m
-  if (poro) then
-     scale=sqrt(exp((log(maxval(mat(:,1)))+log(minval(mat(:,1))))/f2)/         &
-                exp((log(maxval(mat(:,6)))+log(minval(mat(:,6))))/f2)/         &
+  wt=f2*EXP((LOG(MAXVAL(mat(:,1)))+LOG(MINVAL(mat(:,1))))/f2)
+  IF (dmn==3) wt=wt*km2m
+  IF (poro) THEN
+     scale=SQRT(EXP((LOG(MAXVAL(mat(:,1)))+LOG(MINVAL(mat(:,1))))/f2)/         &
+                EXP((LOG(MAXVAL(mat(:,6)))+LOG(MINVAL(mat(:,6))))/f2)/         &
                 dt/km2m)
-  end if
+  END IF
 
   ! Form stiffness matrix (K)
-  call PrintMsg("Forming [K] ...")
+  CALL PrintMsg("Forming [K] ...")
   nodal_bw=(dmn+p)*(nodal_bw+1)
-  call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,nodal_bw,   &
+  CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,nodal_bw,   &
      Petsc_Null_Integer,nodal_bw,Petsc_Null_Integer,Mat_K,ierr)
-  call MatSetOption(Mat_K,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
-  if (fault) then ! Dynamic K
+  CALL MatSetOption(Mat_K,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
+
+  IF (fault) THEN ! Dynamic K
      nodal_bw=nodal_bw/(dmn+p)*dmn
-     call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n_dyn,n_dyn, &
+     CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n_dyn,n_dyn, &
         nodal_bw,Petsc_Null_Integer,nodal_bw,Petsc_Null_Integer,Mat_K_dyn,ierr)
-     call MatSetOption(Mat_K_dyn,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
+     CALL MatSetOption(Mat_K_dyn,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
         ierr)
-  end if
-  do i=1,nels
-     if (poro) then
-        call FormLocalK(i,k,indx,"Kp")
-     else
-        call FormLocalK(i,k,indx,"Ke")
-     end if
+  END IF
+
+  ! Create vector for RHS - Used for case of Dirichlet Pressure
+  CALL VecDuplicate(Vec_U,Vec_F,ierr)
+  f = f0
+
+  DO i=1,nels
+     ! Form elemental K and M matricies
+     IF (poro) THEN
+        IF (DPFlag == 1) THEN
+           ! Use Dirichlet Pressure form
+           CALL FormLocalK_DP(i,k,f,indx,"Kp")
+        ELSE
+           CALL FormLocalK(i,k,indx,"Kp")
+        END IF
+     ELSE
+        CALL FormLocalK(i,k,indx,"Ke")
+     END IF
      indx=indxmap(indx,2)
-     call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
-     if (fault) then
-        dyn=.true.
-        call FormLocalK(i,k_dyn,indx_dyn,"Ke")
+     CALL MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,Add_Values,ierr)
+
+     ! Adjust RHS Values to account for dirichlet pressure
+     CALL VecSetValues(Vec_F,ef_eldof,indx,f,Add_Values,ierr)
+
+     ! Separate dynamic K matrix for IMEX (elastodynamic only)
+     IF (fault) THEN
+        dyn=.TRUE.
+        CALL FormLocalK(i,k_dyn,indx_dyn,"Ke")
         indx_dyn=indxmap_u(indx_dyn,2)
-        call MatSetValues(Mat_K_dyn,eldof,indx_dyn,eldof,indx_dyn,k_dyn,       &
+        CALL MatSetValues(Mat_K_dyn,eldof,indx_dyn,eldof,indx_dyn,k_dyn,       &
            Add_Values,ierr)
-        dyn=.false.
-     end if
-  end do
+        dyn=.FALSE.
+     END IF
+  END DO
 
   ! Initialize and form mass matrix and its inverse
-  if (stype=="explicit" .or. fault) then
-     call PrintMsg("Forming [M] & [M]^-1 ...")
-     if (fault) then
-        call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n_dyn,    &
+  IF (stype=="explicit" .OR. fault) THEN
+     CALL PrintMsg("Forming [M] & [M]^-1 ...")
+     IF (fault) THEN
+        CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n_dyn,    &
            n_dyn,3,Petsc_Null_Integer,3,Petsc_Null_Integer,Mat_M,ierr)
-     elseif (gf) then
-        call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,3,    &
+     ELSEIF (gf) THEN
+        CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,3,    &
            Petsc_Null_Integer,3,Petsc_Null_Integer,Mat_M,ierr)
-     else
-        call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,1,    &
+     ELSE
+        CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,n,1,    &
            Petsc_Null_Integer,0,Petsc_Null_Integer,Mat_M,ierr)
-     end if
-     call MatSetOption(Mat_M,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
-     do i=1,nels
-        if (fault) then
-           call FormLocalM(i,m,indx_dyn)
+     END IF
+     CALL MatSetOption(Mat_M,Mat_New_Nonzero_Allocation_Err,Petsc_False,ierr)
+     DO i=1,nels
+        IF (fault) THEN
+           CALL FormLocalM(i,m,indx_dyn)
            indx_dyn=indxmap_u(indx_dyn,2)
-           do j=1,eldof
+           DO j=1,eldof
               val=m(j,j)
-              call MatSetValue(Mat_M,indx_dyn(j),indx_dyn(j),val,Add_Values,   &
+              CALL MatSetValue(Mat_M,indx_dyn(j),indx_dyn(j),val,Add_Values,   &
                  ierr)
-           end do
-        else
-           call FormLocalM(i,m,indx)
+           END DO
+        ELSE
+           CALL FormLocalM(i,m,indx)
            indx=indxmap(indx,2)
-           do j=1,eldof
+           DO j=1,eldof
               val=m(j,j)
-              call MatSetValue(Mat_M,indx(j),indx(j),val,Add_Values,ierr)
-           end do
-        end if
-     end do
-     call MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
-     call MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
-     call MatDuplicate(Mat_M,Mat_Do_Not_Copy_Values,Mat_Minv,ierr)
-     if (fault) then
-        call MatGetDiagonal(Mat_M,Vec_U_dyn,ierr) ! Vec_U_dyn -> work vector
-        call VecReciprocal(Vec_U_dyn,ierr)
-        call MatDiagonalSet(Mat_Minv,Vec_U_dyn,Insert_Values,ierr)
-        call VecZeroEntries(Vec_U_dyn,ierr)
-     else
-        call MatGetDiagonal(Mat_M,Vec_U,ierr) ! Vec_U is used as a work vector
-        call VecReciprocal(Vec_U,ierr)
-        call MatDiagonalSet(Mat_Minv,Vec_U,Insert_Values,ierr)
-        call VecZeroEntries(Vec_U,ierr)
-     end if
-     call MatScale(Mat_M,alpha,ierr)
-  end if
+              CALL MatSetValue(Mat_M,indx(j),indx(j),val,Add_Values,ierr)
+           END DO
+        END IF
+     END DO
+     CALL MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
+     CALL MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
+     CALL MatDuplicate(Mat_M,Mat_Do_Not_Copy_Values,Mat_Minv,ierr)
+     IF (fault) THEN
+        CALL MatGetDiagonal(Mat_M,Vec_U_dyn,ierr) ! Vec_U_dyn -> work vector
+        CALL VecReciprocal(Vec_U_dyn,ierr)
+        CALL MatDiagonalSet(Mat_Minv,Vec_U_dyn,Insert_Values,ierr)
+        CALL VecZeroEntries(Vec_U_dyn,ierr)
+     ELSE
+        CALL MatGetDiagonal(Mat_M,Vec_U,ierr) ! Vec_U is used as a work vector
+        CALL VecReciprocal(Vec_U,ierr)
+        CALL MatDiagonalSet(Mat_Minv,Vec_U,Insert_Values,ierr)
+        CALL VecZeroEntries(Vec_U,ierr)
+     END IF
+     CALL MatScale(Mat_M,alpha,ierr)
+  END IF
 
   ! Allocate arrays to store loading history
-  allocate(cval(nceqs,3),fnode(nfrcs),fval(nfrcs,dmn+p+2),telsd(ntrcs,2),      &
+  ALLOCATE(cval(nceqs,3),fnode(nfrcs),fval(nfrcs,dmn+p+2),telsd(ntrcs,2),      &
      tval(ntrcs,dmn+p+2)); cval=f0; fval=f0; tval=f0
 
   ! Account for constraint eqn's
-  if (nceqs>0) then
-     call PrintMsg("Applying constraints ...")
-     if (stype=="explicit") then
-        call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,        &
+  IF (nceqs>0) THEN
+     CALL PrintMsg("Applying constraints ...")
+     IF (stype=="explicit") THEN
+        CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,Petsc_Decide,n,        &
            nceqs,3,Petsc_Null_Integer,3,Petsc_Null_Integer,Mat_Gt,ierr)
-        call MatSetOption(Mat_Gt,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
+        CALL MatSetOption(Mat_Gt,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
            ierr)
-     elseif(fault .and. nceqs-nceqs_ncf>0 .and. hyb>0) then
-        call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+nfnd,&
+     ELSEIF(fault .AND. nceqs-nceqs_ncf>0 .AND. hyb>0) THEN
+        CALL VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+nfnd,&
            Vec_lmnd,ierr)
-        call VecGetLocalSize(Vec_lmnd,n_lmnd,ierr)
-        call VecGetOwnershipRange(Vec_lmnd,lmnd0,j,ierr)
-        Call VecDestroy(Vec_lmnd,ierr)
+        CALL VecGetLocalSize(Vec_lmnd,n_lmnd,ierr)
+        CALL VecGetOwnershipRange(Vec_lmnd,lmnd0,j,ierr)
+        CALL VecDestroy(Vec_lmnd,ierr)
         ! Dofs of one fault node are not split by different ranks
-        call VecCreateMPI(Petsc_Comm_World,n_lmnd*dmn,(nceqs_ncf/(dmn+p)+nfnd)*&
+        CALL VecCreateMPI(Petsc_Comm_World,n_lmnd*dmn,(nceqs_ncf/(dmn+p)+nfnd)*&
            dmn,Vec_lambda_sta,ierr)
-        call VecDuplicate(Vec_lambda_sta,Vec_lambda_sta0,ierr)
-        call VecZeroEntries(Vec_lambda_sta,ierr)
-        call VecZeroEntries(Vec_lambda_sta0,ierr)
-        call MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,n_lmnd*dmn,dmn*nnds,   &
+        CALL VecDuplicate(Vec_lambda_sta,Vec_lambda_sta0,ierr)
+        CALL VecZeroEntries(Vec_lambda_sta,ierr)
+        CALL VecZeroEntries(Vec_lambda_sta0,ierr)
+        CALL MatCreateAIJ(Petsc_Comm_World,Petsc_Decide,n_lmnd*dmn,dmn*nnds,   &
            (nceqs_ncf/(dmn+p)+nfnd)*dmn,5,Petsc_Null_Integer,5,                &
            Petsc_Null_Integer,Mat_Gt,ierr)
-        call MatSetOption(Mat_Gt,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
+        CALL MatSetOption(Mat_Gt,Mat_New_Nonzero_Allocation_Err,Petsc_False,   &
            ierr)
-        call MatZeroEntries(Mat_Gt,ierr)
-        allocate(flt_slip(n_lmnd*dmn),tot_flt_slip(n_lmnd*dmn),                &
+        CALL MatZeroEntries(Mat_Gt,ierr)
+        ALLOCATE(flt_slip(n_lmnd*dmn),tot_flt_slip(n_lmnd*dmn),                &
            qs_flt_slip(n_lmnd*dmn))
         qs_flt_slip=f0
-     end if
+     END IF
      ! Open cnstrns.tmp to store constraint equation data
      IF (rank==0) OPEN(15,file="cnstrns.tmp",status="replace")
      DO i=1,nceqs
         ! Read in number of constraint equation terms
-        read(10,*)n
-        if (rank==0) write(15,*)n
-        do j=1,n
-           read(10,*)vvec,node; node=nmap(node)
-           if (rank==0) write(15,*)real(vvec),node
-        end do
-        read(10,*)cval(i,:)
+        READ(10,*)n
+        IF (rank==0) WRITE(15,*)n
+        DO j=1,n
+           READ(10,*)vvec,node; node=nmap(node)
+           IF (rank==0) WRITE(15,*)REAL(vvec),node
+        END DO
+        READ(10,*)cval(i,:)
         IF (poro) THEN
            ! Scale constraint value if nonzero p coefficient
-           if (vvec(dmn+1)/=f0) cval(i,1)=cval(i,1)/scale
-        end if
-        if (rank==0) write(15,*)real(cval(i,:))
-     end do
-     if (rank==0) close(15)
+           IF (vvec(dmn+1)/=f0) cval(i,1)=cval(i,1)/scale
+        END IF
+        IF (rank==0) WRITE(15,*)REAL(cval(i,:))
+     END DO
+     IF (rank==0) CLOSE(15)
 
      ! Read fault orientation vectors
-     if (fault .or. gf) then
-        allocate(node_pos(nfnd),node_neg(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),    &
+     IF (fault .OR. gf) THEN
+        ALLOCATE(node_pos(nfnd),node_neg(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),    &
            fcd(nfnd),dc(nfnd),perm(nfnd),vvec_all(2*nfnd*dmn,dmn),             &
            node_all(2*nfnd*dmn),st_init(nfnd,dmn),xfnd(nfnd,dmn),frc(nfnd),    &
            coh(nfnd),dcoh(nfnd))    
-        if (rsf==1) allocate(rsfb0(nfnd),rsfV0(nfnd),rsfdtau0(nfnd),rsfa(nfnd),&
+        IF (rsf==1) ALLOCATE(rsfb0(nfnd),rsfV0(nfnd),rsfdtau0(nfnd),rsfa(nfnd),&
             rsfb(nfnd),rsfL(nfnd),rsftheta(nfnd))
-        do i=1,nfnd
-           if (poro) then
-              if (rsf==1) then
-                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
+        DO i=1,nfnd
+           IF (poro) THEN
+              IF (rsf==1) THEN
+                 READ(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
                     rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
                     perm(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),              &
                     dcoh(i)
-              else
-                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
+              ELSE
+                 READ(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),    &
                     dc(i),perm(i),st_init(i,:),xfnd(i,:),frc(i),               &
                     coh(i),dcoh(i)
-              end if
-           else
-              if (rsf==1) then
-                 read(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
+              END IF
+           ELSE
+              IF (rsf==1) THEN
+                 READ(10,*) node_pos(i),node_neg(i),vecf(i,:),rsfb0(i),        &
                     rsfV0(i),rsfdtau0(i),rsfa(i),rsfb(i),rsfL(i),rsftheta(i),  &
                     st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i)
-              else
-                read(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),     &
+              ELSE
+                READ(10,*) node_pos(i),node_neg(i),vecf(i,:),fc(i),fcd(i),     &
                    dc(i),st_init(i,:),xfnd(i,:),frc(i),coh(i),dcoh(i)
-              end if
-           end if
+              END IF
+           END IF
            node_pos(i)=nmap(node_pos(i)); node_neg(i)=nmap(node_neg(i))
-        end do
-     end if
+        END DO
+     END IF
 
-     ! Create variables for rotated constrain matrix
-     if (fault .or. gf) then
-        do i=1,nfnd*dmn
-           do j=1,2
-              read(10,*)vvec(1:dmn),node; node=nmap(node)
+     ! Create variables for rotated constraint matrix
+     IF (fault .OR. gf) THEN
+        DO i=1,nfnd*dmn
+           DO j=1,2
+              READ(10,*)vvec(1:dmn),node; node=nmap(node)
               vvec_all(2*(i-1)+j,:)=vvec(1:dmn); node_all(2*(i-1)+j)=node
-           end do
-        end do
-     end if
-     if (rank==0) call ApplyConstraints
-     if (stype=="explicit" .and. .not. gf) then
-        call MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
-        call MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
-     end if
+           END DO
+        END DO
+     END IF
+     IF (rank==0) CALL ApplyConstraints
+     IF (stype=="explicit" .AND. .NOT. gf) THEN
+        CALL MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
+        CALL MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
+     END IF
 
   ! For dummy fault without split nodes
-  elseif (fault) then
-     call PrintMsg("Dummy fault placed ...")
-     allocate(node_pos(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),perm(nfnd))
-     do i=1,nfnd
-        if (poro) then
-           read(10,*) node_pos(i),vecf(i,:),fc(i),perm(i)
-        else
-           read(10,*) node_pos(i),vecf(i,:),fc(i)
-        end if
+  ELSEIF (fault) THEN
+     CALL PrintMsg("Dummy fault placed ...")
+     ALLOCATE(node_pos(nfnd),vecf(nfnd,dmn*dmn),fc(nfnd),perm(nfnd))
+     DO i=1,nfnd
+        IF (poro) THEN
+           READ(10,*) node_pos(i),vecf(i,:),fc(i),perm(i)
+        ELSE
+           READ(10,*) node_pos(i),vecf(i,:),fc(i)
+        END IF
         node_pos(i)=nmap(node_pos(i))
-     end do
-  end if
+     END DO
+  END IF
 
-  call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
-  call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
-  if (fault .and. nceqs>0) then
-     call MatAssemblyBegin(Mat_K_dyn,Mat_Final_Assembly,ierr)
-     call MatAssemblyEnd(Mat_K_dyn,Mat_Final_Assembly,ierr)
-  end if
+  CALL MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+  CALL MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+  IF (fault .AND. nceqs>0) THEN
+     CALL MatAssemblyBegin(Mat_K_dyn,Mat_Final_Assembly,ierr)
+     CALL MatAssemblyEnd(Mat_K_dyn,Mat_Final_Assembly,ierr)
+  END IF
 
   ! Form RHS
-  call PrintMsg("Forming RHS ...")
-  call VecDuplicate(Vec_U,Vec_F,ierr)
+  CALL PrintMsg("Forming RHS ...")
+  !CALL VecDuplicate(Vec_U,Vec_F,ierr)
   tstep=0
   ! Read in nodal force / fluid source values and time intervals
   DO i=1,nfrcs
-     read(10,*)fnode(i),fval(i,:)
+     READ(10,*)fnode(i),fval(i,:)
   END DO
   ! Read in traction BC data; element ID, facet number, traction/flux value,
   ! and applied time interval
-  do i=1,ntrcs
-     read(10,*)telsd(i,:),tval(i,:)
-  end do
+  DO i=1,ntrcs
+     READ(10,*)telsd(i,:),tval(i,:)
+  END DO
   fnode=nmap(fnode); telsd(:,1)=emap(telsd(:,1)) ! Remap nodes/els
-  call FormRHS
-  call VecAssemblyBegin(Vec_F,ierr)
-  call VecAssemblyEnd(Vec_F,ierr)
+  CALL FormRHS
+  CALL VecAssemblyBegin(Vec_F,ierr)
+  CALL VecAssemblyEnd(Vec_F,ierr)
 
   ! Observation solution space
-  if (nobs>0) then
-     allocate(ocoord(nobs,dmn))
-     do i=1,nobs
-        read(10,*) ocoord(i,:)
-     end do
-     call GetObsNd("ob")
-     if (nobs_loc>0) then
-        allocate(uu_obs(nobs_loc,dmn+p),tot_uu_obs(nobs_loc,dmn+p),            &
+  IF (nobs>0) THEN
+     ALLOCATE(ocoord(nobs,dmn))
+     DO i=1,nobs
+        READ(10,*) ocoord(i,:)
+     END DO
+     CALL GetObsNd("ob")
+     IF (nobs_loc>0) THEN
+        ALLOCATE(uu_obs(nobs_loc,dmn+p),tot_uu_obs(nobs_loc,dmn+p),            &
            uu_dyn_obs(nobs_loc,dmn),tot_uu_dyn_obs(nobs_loc,dmn))
         tot_uu_obs=f0
-     end if
+     END IF
      n_log_dyn=0
-  end if
+  END IF
   
   ! FD domain grid bocks containing fault nodes, xgp, idgp(_loc), gpl2g, gpnlst, gpshape
-  if (nceqs-nceqs_ncf>0 .and. fdout==1) then
-     call PrintMsg("Locating FD grid points ...")
-     call FDInit
-     call GetFDFnd 
-     call GetObsNd("fd")
-     deallocate(xgp,idgp)  
-     if (ngp_loc>0) allocate(uu_fd(ngp_loc,dmn))
-     call NndFE2FD
-     call MatFE2FD
-  end if
+  IF (nceqs-nceqs_ncf>0 .AND. fdout==1) THEN
+     CALL PrintMsg("Locating FD grid points ...")
+     CALL FDInit
+     CALL GetFDFnd 
+     CALL GetObsNd("fd")
+     DEALLOCATE(xgp,idgp)  
+     IF (ngp_loc>0) ALLOCATE(uu_fd(ngp_loc,dmn))
+     CALL NndFE2FD
+     CALL MatFE2FD
+  END IF
 
   ! Account for absorbing boundaries
-  call PrintMsg("Absorbing boundary ...")
-  if (stype=="explicit" .or. (fault .and. nceqs>0)) then
-     do i=1,nabcs
+  CALL PrintMsg("Absorbing boundary ...")
+  IF (stype=="explicit" .OR. (fault .AND. nceqs>0)) THEN
+     DO i=1,nabcs
         ! For axis aligned absorbing boundaries
         !read(10,*)el,side,j; el=emap(el)
         ! j (dir ID) has no use for arbitrarily facing AbsC 
-        read(10,*)el,side; el=emap(el)
-        if (el/=0) then
-           if (fault) then
+        READ(10,*)el,side; el=emap(el)
+        IF (el/=0) THEN
+           IF (fault) THEN
               !call FormLocalAbsC(el,side,abs(j),m,indx_dyn)
-              call FormLocalAbsC1(el,side,m,indx_dyn)
+              CALL FormLocalAbsC1(el,side,m,indx_dyn)
               indx_dyn=indxmap_u(indx_dyn,2)
               !do j=1,eldof
               !   val=m(j,j)
@@ -551,218 +578,218 @@ program main
               !end do
               !call MatSetValues(Mat_M,eldof,indx_dyn,eldof,indx_dyn,m,         &
               !   Add_Values,ierr)
-              do j1=1,eldof
-                 do j2=1,eldof
+              DO j1=1,eldof
+                 DO j2=1,eldof
                     val=m(j1,j2)
-                    if (abs(val)>f0) call MatSetValue(Mat_M,indx_dyn(j1),      &
+                    IF (ABS(val)>f0) CALL MatSetValue(Mat_M,indx_dyn(j1),      &
                        indx_dyn(j2),val,Add_Values,ierr)
-                 end do
-              end do
-           else
+                 END DO
+              END DO
+           ELSE
               !call FormLocalAbsC(el,side,abs(j),m,indx)
-              call FormLocalAbsC1(el,side,m,indx)
+              CALL FormLocalAbsC1(el,side,m,indx)
               indx=indxmap(indx,2)
               !do j=1,eldof
               !   val=m(j,j)
               !   call MatSetValue(Mat_M,indx(j),indx(j),val,Add_Values,ierr)
               !end do
               !call MatSetValues(Mat_M,eldof,indx,eldof,indx,m,Add_Values,ierr)
-              do j1=1,eldof
-                 do j2=1,eldof
+              DO j1=1,eldof
+                 DO j2=1,eldof
                     val=m(j1,j2)
-                    if (abs(val)>f0) call MatSetValue(Mat_M,indx(j1),indx(j2), &
+                    IF (ABS(val)>f0) CALL MatSetValue(Mat_M,indx(j1),indx(j2), &
                        val,Add_Values,ierr)
-                 end do
-              end do
-           end if
-        end if
-     end do
-     call MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
-     call MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
-  end if
-  close(10)
-  deallocate(nmap,emap) ! End of input reading
+                 END DO
+              END DO
+           END IF
+        END IF
+     END DO
+     CALL MatAssemblyBegin(Mat_M,Mat_Final_Assembly,ierr)
+     CALL MatAssemblyEnd(Mat_M,Mat_Final_Assembly,ierr)
+  END IF
+  CLOSE(10)
+  DEALLOCATE(nmap,emap) ! End of input reading
 
   ! Initialize arrays to communicate ghost node values
-  call PrintMsg("Setting up solver ...")
-  j=size(indxmap,1)
-  call VecCreateSeq(Petsc_Comm_Self,j,Seq_U,ierr)
-  call ISCreateGeneral(Petsc_Comm_Self,j,indxmap(:,2),Petsc_Copy_Values,From,  &
+  CALL PrintMsg("Setting up solver ...")
+  j=SIZE(indxmap,1)
+  CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_U,ierr)
+  CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap(:,2),Petsc_Copy_Values,From,  &
      ierr)
-  call ISCreateGeneral(Petsc_Comm_Self,j,indxmap(:,1),Petsc_Copy_Values,To,    &
+  CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap(:,1),Petsc_Copy_Values,To,    &
      ierr)
-  call VecScatterCreate(Vec_U,From,Seq_U,To,Scatter,ierr)
-  allocate(uu(j),tot_uu(j)); tot_uu=f0
-  if (fault) then
-     if (lm_str==1) then
-        j=size(indxmap_u,1)
-        call VecCreateSeq(Petsc_Comm_Self,j,Seq_SS,ierr)
-        call VecCreateSeq(Petsc_Comm_Self,j,Seq_SH,ierr)
-        if (nceqs>0) call VecCreateSeq(Petsc_Comm_Self,j,Seq_f2s,ierr)
-        call VecCreateSeq(Petsc_Comm_Self,j,Seq_dip,ierr)
-        call VecCreateSeq(Petsc_Comm_Self,j,Seq_nrm,ierr)
-     end if
-     j=size(indxmap_u,1)
-     call VecCreateSeq(Petsc_Comm_Self,j,Seq_U_dyn,ierr)
-     call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),Petsc_Copy_Values,  &
+  CALL VecScatterCreate(Vec_U,From,Seq_U,To,Scatter,ierr)
+  ALLOCATE(uu(j),tot_uu(j)); tot_uu=f0
+  IF (fault) THEN
+     IF (lm_str==1) THEN
+        j=SIZE(indxmap_u,1)
+        CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_SS,ierr)
+        CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_SH,ierr)
+        IF (nceqs>0) CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_f2s,ierr)
+        CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_dip,ierr)
+        CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_nrm,ierr)
+     END IF
+     j=SIZE(indxmap_u,1)
+     CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_U_dyn,ierr)
+     CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),Petsc_Copy_Values,  &
         From,ierr)
-     call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),Petsc_Copy_Values,  &
+     CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),Petsc_Copy_Values,  &
         To,ierr)
-     call VecScatterCreate(Vec_U_dyn,From,Seq_U_dyn,To,Scatter_dyn,ierr)
-     allocate(uu_dyn(j),tot_uu_dyn(j)) 
-     if (lm_str==1) then
-        allocate(ss(j),sh(j),f2s(j),dip(j),nrm(j))
-     end if
-  end if
+     CALL VecScatterCreate(Vec_U_dyn,From,Seq_U_dyn,To,Scatter_dyn,ierr)
+     ALLOCATE(uu_dyn(j),tot_uu_dyn(j)) 
+     IF (lm_str==1) THEN
+        ALLOCATE(ss(j),sh(j),f2s(j),dip(j),nrm(j))
+     END IF
+  END IF
   !===========================================================================80
   ! Implicit Solver
   IF (stype/="explicit" .AND. (.NOT. fault)) THEN
-     call KSPCreate(Petsc_Comm_World,Krylov,ierr)
+     CALL KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
-     call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
+     CALL KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
 #else
-     call KSPSetOperators(Krylov,Mat_K,Mat_K,ierr)
+     CALL KSPSetOperators(Krylov,Mat_K,Mat_K,ierr)
 #endif
-     call SetupKSPSolver
-     call PrintMsg("Solving ...")
-     call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-     call GetVec_U; tot_uu=tot_uu+uu
-     if (nobs_loc>0) then
-        call GetVec_obs
+     CALL SetupKSPSolver
+     CALL PrintMsg("Solving ...")
+     CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+     CALL GetVec_U; tot_uu=tot_uu+uu
+     IF (nobs_loc>0) THEN
+        CALL GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
-     end if
-     if (visco) then
+     END IF
+     IF (visco) THEN
         ! Recover stress
-        call PrintMsg("Recovering stress ...")
-        do i=1,nels
-           call RecoverStress(i,stress)
-        end do
-     end if
+        CALL PrintMsg("Recovering stress ...")
+        DO i=1,nels
+           CALL RecoverStress(i,stress)
+        END DO
+     END IF
      ! Write output
-     call WriteOutput
+     CALL WriteOutput
      ! Prepare for time stepping
-     if (t>f0 .and. dt>f0 .and. t>=dt) then
-        if (poro) then
+     IF (t>f0 .AND. dt>f0 .AND. t>=dt) THEN
+        IF (poro) THEN
            ! Form Kc and Up
-           call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
-           call VecCopy(Vec_U,Vec_Um,ierr)
-           call VecGetLocalSize(Vec_U,j,ierr)
-           call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
+           CALL VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
+           CALL VecCopy(Vec_U,Vec_Um,ierr)
+           CALL VecGetLocalSize(Vec_U,j,ierr)
+           CALL VecGetOwnershipRange(Vec_U,j1,j2,ierr)
            j2=0
-           do i=1,j
-              if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
+           DO i=1,j
+              IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
                  j2=j2+1
-              end if
-           end do
-           allocate(work(j2))
+              END IF
+           END DO
+           ALLOCATE(work(j2))
            j2=0
-           do i=1,j
-              if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
+           DO i=1,j
+              IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
                  j2=j2+1
                  work(j2)=j1+i-1
-              end if
-           end do
-           j=size(work)
-           call ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,     &
+              END IF
+           END DO
+           j=SIZE(work)
+           CALL ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,     &
               RI,ierr)
-           call MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
-           call MatZeroEntries(Mat_Kc,ierr)
-           allocate(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
-           do i=1,nels
-              call FormLocalK(i,k,indx,"Kc")
+           CALL MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
+           CALL MatZeroEntries(Mat_Kc,ierr)
+           ALLOCATE(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
+           DO i=1,nels
+              CALL FormLocalK(i,k,indx,"Kc")
               kc=k(eldof+1:,eldof+1:)
               indxp=indx(eldof+1:); indxp=indxmap(indxp,2)
               indxp=((indxp+1)/(dmn+1))-1
-              call MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,           &
+              CALL MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,           &
                  Add_Values,ierr)
-           end do
-           call MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
-           call MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
-           call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-           call VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
-           call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-           allocate(uup(size(work)))
-        end if
-        steps=int(ceiling(t/dt))
+           END DO
+           CALL MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
+           CALL MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
+           CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+           CALL VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
+           CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+           ALLOCATE(uup(SIZE(work)))
+        END IF
+        steps=INT(CEILING(t/dt))
         ! Start time stepping
-        do tstep=1,steps
-           if (rank==0) print'(A11,I0)'," Time Step ",tstep
+        DO tstep=1,steps
+           IF (rank==0) PRINT'(A11,I0)'," Time Step ",tstep
            ! Reform stiffness matrix, if needed
-           if (visco .and. (tstep==1 .or. maxval(mat(:,4))>f1)) then
-              call PrintMsg(" Reforming [K] ...")
-              call MatZeroEntries(Mat_K,ierr)
-              do i=1,nels
-                 call FormLocalK(i,k,indx,"Kv")
+           IF (visco .AND. (tstep==1 .OR. MAXVAL(mat(:,4))>f1)) THEN
+              CALL PrintMsg(" Reforming [K] ...")
+              CALL MatZeroEntries(Mat_K,ierr)
+              DO i=1,nels
+                 CALL FormLocalK(i,k,indx,"Kv")
                  indx=indxmap(indx,2)
-                 call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,        &
+                 CALL MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,        &
                     Add_Values,ierr)
-              end do
+              END DO
               ! Account for constraint eqn's
-              if (rank==0 .and. nceqs>0) call ApplyConstraints
-              call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
-              call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
-           end if
+              IF (rank==0 .AND. nceqs>0) CALL ApplyConstraints
+              CALL MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+              CALL MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+           END IF
            ! Reform RHS
-           call VecZeroEntries(Vec_F,ierr)
-           call PrintMsg(" Reforming RHS ...")
-           if (poro) then
-              call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-              call MatMult(Mat_Kc,Vec_Up,Vec_I,ierr)
-              call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-              call VecScale(Vec_I,-dt,ierr)
-              call VecGetArrayF90(Vec_I,pntr,ierr)
+           CALL VecZeroEntries(Vec_F,ierr)
+           CALL PrintMsg(" Reforming RHS ...")
+           IF (poro) THEN
+              CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+              CALL MatMult(Mat_Kc,Vec_Up,Vec_I,ierr)
+              CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+              CALL VecScale(Vec_I,-dt,ierr)
+              CALL VecGetArrayF90(Vec_I,pntr,ierr)
               uup=pntr
-              call VecRestoreArrayF90(Vec_I,pntr,ierr)
-              j=size(uup)
-              call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
+              CALL VecRestoreArrayF90(Vec_I,pntr,ierr)
+              j=SIZE(uup)
+              CALL VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
               ! Stabilize RHS
-              do i=1,nels
-                 call FormLocalHs(i,Hs,indxp)
+              DO i=1,nels
+                 CALL FormLocalHs(i,Hs,indxp)
                  indxp=indxmap(indxp,2)
-                 call VecSetValues(Vec_F,npel,indxp,Hs,Add_Values,ierr)
-              end do
-           end if
-           if (visco) then
-              do i=1,nels
-                 call ReformLocalRHS(i,f,indx)
+                 CALL VecSetValues(Vec_F,npel,indxp,Hs,Add_Values,ierr)
+              END DO
+           END IF
+           IF (visco) THEN
+              DO i=1,nels
+                 CALL ReformLocalRHS(i,f,indx)
                  indx=indxmap(indx,2)
-                 call VecSetValues(Vec_F,eldof,indx,f,Add_Values,ierr)
-              end do
-           end if
-           call FormRHS
-           call VecAssemblyBegin(Vec_F,ierr)
-           call VecAssemblyEnd(Vec_F,ierr)
+                 CALL VecSetValues(Vec_F,eldof,indx,f,Add_Values,ierr)
+              END DO
+           END IF
+           CALL FormRHS
+           CALL VecAssemblyBegin(Vec_F,ierr)
+           CALL VecAssemblyEnd(Vec_F,ierr)
            ! Solve
-           call PrintMsg(" Solving ...")
-           call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-           call GetVec_U; tot_uu=tot_uu+uu
-           if (poro) call VecAXPY(Vec_Um,f1,Vec_U,ierr)
-           if (visco) then
+           CALL PrintMsg(" Solving ...")
+           CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+           CALL GetVec_U; tot_uu=tot_uu+uu
+           IF (poro) CALL VecAXPY(Vec_Um,f1,Vec_U,ierr)
+           IF (visco) THEN
               ! Recover stress
-              call PrintMsg(" Recovering stress ...")
-              do i=1,nels
-                 call RecoverVStress(i,stress)
-              end do
-           end if
+              CALL PrintMsg(" Recovering stress ...")
+              DO i=1,nels
+                 CALL RecoverVStress(i,stress)
+              END DO
+           END IF
            ! Write output
-           if (mod(tstep,frq)==0) call WriteOutput
-           if (nobs_loc>0) then
-              call GetVec_obs
+           IF (MOD(tstep,frq)==0) CALL WriteOutput
+           IF (nobs_loc>0) THEN
+              CALL GetVec_obs
               tot_uu_obs=tot_uu_obs+uu_obs
-              call WriteOutput_obs
-           end if
+              CALL WriteOutput_obs
+           END IF
            !end if
-        end do
-        if (poro) deallocate(uup,kc,indxp,Hs,work)
-     end if
-     if (poro) then
-        call VecDestroy(Vec_I,ierr)
-        call VecDestroy(Vec_Up,ierr)
-        call MatDestroy(Mat_Kc,ierr)
-        call ISDestroy(RI,ierr)
-        call VecDestroy(Vec_Um,ierr)
-     end if
-     call KSPDestroy(Krylov,ierr)
+        END DO
+        IF (poro) DEALLOCATE(uup,kc,indxp,Hs,work)
+     END IF
+     IF (poro) THEN
+        CALL VecDestroy(Vec_I,ierr)
+        CALL VecDestroy(Vec_Up,ierr)
+        CALL MatDestroy(Mat_Kc,ierr)
+        CALL ISDestroy(RI,ierr)
+        CALL VecDestroy(Vec_Um,ierr)
+     END IF
+     CALL KSPDestroy(Krylov,ierr)
   END IF
   !---------------------------------------------------------------------------80
 
@@ -770,931 +797,934 @@ program main
   ! Fault/hybrid solver
   IF (fault) THEN
      ! Local to global fault node map
-     if (nceqs-nceqs_ncf>0) call GetFltMap
+     IF (nceqs-nceqs_ncf>0) CALL GetFltMap
      IF (bod_frc==1) THEN
-        call PrintMsg("Applying gravity ...")
+        ! Apply gravitational body force
+        CALL PrintMsg("Applying gravity ...")
         CALL ApplyGravity
      END IF
-     call KSPCreate(Petsc_Comm_World,Krylov,ierr)
+     CALL KSPCreate(Petsc_Comm_World,Krylov,ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
-     call KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
+     CALL KSPSetOperators(Krylov,Mat_K,Mat_K,Different_Nonzero_Pattern,ierr)
 #else
-     call KSPSetOperators(Krylov,Mat_K,Mat_K,ierr)
+     CALL KSPSetOperators(Krylov,Mat_K,Mat_K,ierr)
 #endif
-     call SetupKSPSolver
-     call PrintMsg("Solving ...")
-     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     !print'(A,I0,A,I0,A,I0)',"  Rank ",rank," has dofs ",j1+1," to ",j2
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
+     CALL SetupKSPSolver
+     CALL PrintMsg("Solving ...")
+     CALL VecGetOwnershipRange(Vec_U,j1,j2,ierr)
+    ! Debug Nodal Ownership Printout
+    !print'(A,I0,A,I0,A,I0)',"  Rank ",rank," has dofs ",j1+1," to ",j2
+     IF (rank==nprcs-1) PRINT'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
         " processors."
-     call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-     call GetVec_U; tot_uu=tot_uu+uu
+     ! Solve system to generate initial U values           
+     CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+     CALL GetVec_U; tot_uu=tot_uu+uu
      ! Get observation
-     if (nobs_loc>0) then
-        call GetVec_obs
+     IF (nobs_loc>0) THEN
+        CALL GetVec_obs
         tot_uu_obs=tot_uu_obs+uu_obs
-     end if
-     if (visco .or. lm_str==1) then
+     END IF
+     IF (visco .OR. lm_str==1) THEN
         ! Recover stress
-        call PrintMsg("Recovering stress ...")
-        do i=1,nels
-           call RecoverStress(i,stress)
-        end do
-     end if
-     if (t>f0 .and. dt>f0 .and. t>=dt) then
-        call VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
-        call VecCopy(Vec_U,Vec_Um,ierr)
-        call VecGetLocalSize(Vec_U,j,ierr)
-        if (poro) then
+        CALL PrintMsg("Recovering stress ...")
+        DO i=1,nels
+           CALL RecoverStress(i,stress)
+        END DO
+     END IF
+     IF (t>f0 .AND. dt>f0 .AND. t>=dt) THEN
+        CALL VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
+        CALL VecCopy(Vec_U,Vec_Um,ierr)
+        CALL VecGetLocalSize(Vec_U,j,ierr)
+        IF (poro) THEN
            j2=0; j3=0; j4=0; j5=0; j6=0
-           do i=1,j
-              if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
+           DO i=1,j
+              IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
                  j2=j2+1
-              end if
-              if (nceqs>0) then
-                 if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
+              END IF
+              IF (nceqs>0) THEN
+                 IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
                     j3=j3+1
-                 end if
-              end if
-              if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+                 END IF
+              END IF
+              IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
                  j4=j4+1
-              end if
-              if (j1+i-1<(dmn+1)*nnds) then
+              END IF
+              IF (j1+i-1<(dmn+1)*nnds) THEN
                  j5=j5+1
-              end if
-           end do
-           allocate(work(j2),workl(j3),worku(j4))
+              END IF
+           END DO
+           ALLOCATE(work(j2),workl(j3),worku(j4))
            j2=0; j3=0; j4=0; j5=0
-           do i=1,j
-              if (mod(j1+i,dmn+1)==0 .and. j1+i-1<(dmn+1)*nnds) then
+           DO i=1,j
+              IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
                  j2=j2+1
                  work(j2)=j1+i-1
-              end if
-              if (mod(j1+i,dmn+1)>0 .and. j1+i-1<(dmn+1)*nnds) then
+              END IF
+              IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
                  j4=j4+1
                  worku(j4)=j1+i-1
-              end if
-              if (nceqs>0) then
-                 if (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) then
+              END IF
+              IF (nceqs>0) THEN
+                 IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
                     j3=j3+1
                     workl(j3)=j1+i-1
-                 end if
-              end if
-           end do
-           j=size(work)
-           call ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,  &
+                 END IF
+              END IF
+           END DO
+           j=SIZE(work)
+           CALL ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,  &
               ierr)
-           j=size(worku)
-           call ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
+           j=SIZE(worku)
+           CALL ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
               RIu,ierr)
-           call MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
-           if (nceqs > 0) then
-              j=size(workl)
-              call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
+           CALL MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
+           IF (nceqs > 0) THEN
+              j=SIZE(workl)
+              CALL ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
                  RIl,ierr)
-           end if
-           call MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
-           call MatZeroEntries(Mat_Kc,ierr)
-           allocate(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
-           do i=1,nels
-              call FormLocalK(i,k,indx,"Kc")
+           END IF
+           CALL MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
+           CALL MatZeroEntries(Mat_Kc,ierr)
+           ALLOCATE(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
+           DO i=1,nels
+              CALL FormLocalK(i,k,indx,"Kc")
               kc=k(eldof+1:,eldof+1:)
               indxp=indx(eldof+1:); indxp=indxmap(indxp,2)
               indxp=((indxp+1)/(dmn+1))-1
-              call MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,           &
+              CALL MatSetValues(Mat_Kc,eldofp,indxp,eldofp,indxp,kc,           &
                  Add_Values,ierr)
-           end do
-           call MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
-           call MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
-           call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-           if (init==1) call VecDuplicate(Vec_Up,Vec_Up0,ierr) ! Initial p
-           call VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
-           call VecCopy(Vec_Up,Vec_I,ierr) ! Hold Up
-           call VecDuplicate(Vec_Up,Vec_qu,ierr) ! qu->Htu
-           call VecDuplicate(Vec_Up,Vec_ql,ierr)
-           call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
-           allocate(uup(size(work)))
+           END DO
+           CALL MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
+           CALL MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
+           CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+           IF (init==1) CALL VecDuplicate(Vec_Up,Vec_Up0,ierr) ! Initial p
+           CALL VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
+           CALL VecCopy(Vec_Up,Vec_I,ierr) ! Hold Up
+           CALL VecDuplicate(Vec_Up,Vec_qu,ierr) ! qu->Htu
+           CALL VecDuplicate(Vec_Up,Vec_ql,ierr)
+           CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+           ALLOCATE(uup(SIZE(work)))
            ! Initialize space for lambda, p related nodal force
-           call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           call VecDuplicate(Vec_Uu,Vec_fp,ierr) ! fp->Hp
-           call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
-           call VecCopy(Vec_Uu,Vec_fl,ierr) ! Hold Uu
-           call VecDuplicate(Vec_Uu,Vec_flc,ierr)
-           if (lm_str==1) then
-              call VecDuplicate(Vec_Uu,Vec_SS,ierr)
-              call VecDuplicate(Vec_Uu,Vec_SH,ierr)
-              call VecZeroEntries(Vec_SS,ierr)
-              call VecZeroEntries(Vec_SH,ierr)
-              if (nceqs>0) then
-                 call VecDuplicate(Vec_Uu,Vec_f2s,ierr)
-                 call VecZeroEntries(Vec_f2s,ierr)
-              end if
-              call VecDuplicate(Vec_Uu,Vec_dip,ierr)
-              call VecZeroEntries(Vec_dip,ierr)
-              call VecDuplicate(Vec_Uu,Vec_nrm,ierr)
-              call VecZeroEntries(Vec_nrm,ierr)
-           end if
-           call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           j=size(indxmap_u,1)
-           if (nceqs>0) then
-              call VecCreateSeq(Petsc_Comm_Self,j,Seq_fl,ierr)
-              call VecCreateSeq(Petsc_Comm_Self,j,Seq_flc,ierr)
-           end if
-           call VecCreateSeq(Petsc_Comm_Self,j,Seq_fp,ierr)
-           call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),              &
+           CALL VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+           CALL VecDuplicate(Vec_Uu,Vec_fp,ierr) ! fp->Hp
+           CALL VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
+           CALL VecCopy(Vec_Uu,Vec_fl,ierr) ! Hold Uu
+           CALL VecDuplicate(Vec_Uu,Vec_flc,ierr)
+           IF (lm_str==1) THEN
+              CALL VecDuplicate(Vec_Uu,Vec_SS,ierr)
+              CALL VecDuplicate(Vec_Uu,Vec_SH,ierr)
+              CALL VecZeroEntries(Vec_SS,ierr)
+              CALL VecZeroEntries(Vec_SH,ierr)
+              IF (nceqs>0) THEN
+                 CALL VecDuplicate(Vec_Uu,Vec_f2s,ierr)
+                 CALL VecZeroEntries(Vec_f2s,ierr)
+              END IF
+              CALL VecDuplicate(Vec_Uu,Vec_dip,ierr)
+              CALL VecZeroEntries(Vec_dip,ierr)
+              CALL VecDuplicate(Vec_Uu,Vec_nrm,ierr)
+              CALL VecZeroEntries(Vec_nrm,ierr)
+           END IF
+           CALL VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+           j=SIZE(indxmap_u,1)
+           IF (nceqs>0) THEN
+              CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_fl,ierr)
+              CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_flc,ierr)
+           END IF
+           CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_fp,ierr)
+           CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),              &
               Petsc_Copy_Values,From_u,ierr)
-           call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),              &
+           CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),              &
               Petsc_Copy_Values,To_u,ierr)
-           call VecScatterCreate(Vec_fp,From_u,Seq_fp,To_u,Scatter_u,ierr)
-           j=size(nl2g,1)
-           if (nceqs>0) call VecCreateSeq(Petsc_Comm_Self,j,Seq_ql,ierr)
-           call VecCreateSeq(Petsc_Comm_Self,j,Seq_qu,ierr)
-           call ISCreateGeneral(Petsc_Comm_Self,j,nl2g(:,2)-1,                 &
+           CALL VecScatterCreate(Vec_fp,From_u,Seq_fp,To_u,Scatter_u,ierr)
+           j=SIZE(nl2g,1)
+           IF (nceqs>0) CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_ql,ierr)
+           CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_qu,ierr)
+           CALL ISCreateGeneral(Petsc_Comm_Self,j,nl2g(:,2)-1,                 &
               Petsc_Copy_Values,From_p,ierr)
-           call ISCreateGeneral(Petsc_Comm_Self,j,nl2g(:,1)-1,                 &
+           CALL ISCreateGeneral(Petsc_Comm_Self,j,nl2g(:,1)-1,                 &
               Petsc_Copy_Values,To_p,ierr)
-           call VecScatterCreate(Vec_qu,From_p,Seq_qu,To_p,Scatter_q,ierr)
-           allocate(fp(size(indxmap_u,1)))
-           allocate(qu(size(nl2g,1)))
-           if (nceqs>0) then
-              allocate(fl(size(indxmap_u,1)))
-              allocate(ql(size(nl2g,1)))
-              allocate(flc(size(indxmap_u,1)))
-           end if
-           if (vout==1) then ! Extract nodal force by p, and fluid source by u
-              call MatMult(Mat_H,Vec_I,Vec_fp,ierr)
-              call VecScale(Vec_fp,-f1,ierr)
-              call GetVec_fp
-              call MatCreateTranspose(Mat_H,Mat_Ht,ierr)
-              call MatMult(Mat_Ht,Vec_fl,Vec_qu,ierr)
-              call GetVec_qu
-           end if
+           CALL VecScatterCreate(Vec_qu,From_p,Seq_qu,To_p,Scatter_q,ierr)
+           ALLOCATE(fp(SIZE(indxmap_u,1)))
+           ALLOCATE(qu(SIZE(nl2g,1)))
+           IF (nceqs>0) THEN
+              ALLOCATE(fl(SIZE(indxmap_u,1)))
+              ALLOCATE(ql(SIZE(nl2g,1)))
+              ALLOCATE(flc(SIZE(indxmap_u,1)))
+           END IF
+           IF (vout==1) THEN ! Extract nodal force by p, and fluid source by u
+              CALL MatMult(Mat_H,Vec_I,Vec_fp,ierr)
+              CALL VecScale(Vec_fp,-f1,ierr)
+              CALL GetVec_fp
+              CALL MatCreateTranspose(Mat_H,Mat_Ht,ierr)
+              CALL MatMult(Mat_Ht,Vec_fl,Vec_qu,ierr)
+              CALL GetVec_qu
+           END IF
            ! Extract lambda
-           if (nceqs>0) then
+           IF (nceqs>0) THEN
               ! Vector to communicate with dynamic LM
-              call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+              CALL VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               !call LM_s2d 
               ! Extract lambda induced nodal force
-              if (vout==1) then
-                 call VecZeroEntries(Vec_fl,ierr)
-                 call VecZeroEntries(Vec_flc,ierr)
-                 call VecZeroEntries(Vec_ql,ierr)
-                 call GetVec_ql
-                 call GetVec_flambda
-                 call GetVec_fl
-                 call GetVec_fcoulomb
-                 call GetVec_flc
-              else
+              IF (vout==1) THEN
+                 CALL VecZeroEntries(Vec_fl,ierr)
+                 CALL VecZeroEntries(Vec_flc,ierr)
+                 CALL VecZeroEntries(Vec_ql,ierr)
+                 CALL GetVec_ql
+                 CALL GetVec_flambda
+                 CALL GetVec_fl
+                 CALL GetVec_fcoulomb
+                 CALL GetVec_flc
+              ELSE
                  ! Extract Coulomb force (needed by force-stress translation).  
-                 call GetVec_fcoulomb
-              end if
-              call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-           end if
-           if (lm_str==1) then ! Scatter stress to nodes
-              call GetVec_Stress
-              call GetVec_S
-              if (nceqs>0) then
-                 call GetVec_f2s
-                 call GetVec_f2s_seq
-              else
-                 call GetVec_ft
-              end if
-              call GetVec_dip_nrm
-              if (vout==1) call WriteOutput_f2s
-              call VecDestroy(Vec_dip,ierr)
-              call VecDestroy(Seq_dip,ierr)
-              call VecDestroy(Vec_nrm,ierr)
-              call VecDestroy(Seq_nrm,ierr)
-              call VecDestroy(Seq_f2s,ierr)
-              deallocate(f2s,dip,nrm)
-           end if
+                 CALL GetVec_fcoulomb
+              END IF
+              CALL VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+           END IF
+           IF (lm_str==1) THEN ! Scatter stress to nodes
+              CALL GetVec_Stress
+              CALL GetVec_S
+              IF (nceqs>0) THEN
+                 CALL GetVec_f2s
+                 CALL GetVec_f2s_seq
+              ELSE
+                 CALL GetVec_ft
+              END IF
+              CALL GetVec_dip_nrm
+              IF (vout==1) CALL WriteOutput_f2s
+              CALL VecDestroy(Vec_dip,ierr)
+              CALL VecDestroy(Seq_dip,ierr)
+              CALL VecDestroy(Vec_nrm,ierr)
+              CALL VecDestroy(Seq_nrm,ierr)
+              CALL VecDestroy(Seq_f2s,ierr)
+              DEALLOCATE(f2s,dip,nrm)
+           END IF
            ! Write output
-           if (vout==1) call WriteOutput_x
-           if (nobs_loc>0) call WriteOutput_obs 
-           if (init==1) then
-              call PrintMsg("Pore fluid initialization...")
-              call VecGetSubVector(Vec_Um,RI,Vec_Up0,ierr)
+           IF (vout==1) CALL WriteOutput_x
+           IF (nobs_loc>0) CALL WriteOutput_obs 
+           IF (init==1) THEN
+              CALL PrintMsg("Pore fluid initialization...")
+              CALL VecGetSubVector(Vec_Um,RI,Vec_Up0,ierr)
               ! Zero initial pressure 
-              call VecZeroEntries(Vec_Up0,ierr)
-              call VecRestoreSubVector(Vec_Um,RI,Vec_Up0,ierr)
-              call VecDestroy(Vec_Up0,ierr)
+              CALL VecZeroEntries(Vec_Up0,ierr)
+              CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up0,ierr)
+              CALL VecDestroy(Vec_Up0,ierr)
               tot_uu=f0
-              call VecZeroEntries(Vec_F,ierr)
-              call ApplySource
-              call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
-              call GetVec_U; tot_uu=tot_uu+uu
-              call VecAXPY(Vec_Um,f1,Vec_U,ierr)
-              if (vout==1) then
-                 if (nceqs>0) then
-                    call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                    call VecZeroEntries(Vec_flc,ierr)
-                    call GetVec_fcoulomb
-                    call GetVec_flc
-                    call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                 end if
+              CALL VecZeroEntries(Vec_F,ierr)
+              CALL ApplySource
+              CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+              CALL GetVec_U; tot_uu=tot_uu+uu
+              CALL VecAXPY(Vec_Um,f1,Vec_U,ierr)
+              IF (vout==1) THEN
+                 IF (nceqs>0) THEN
+                    CALL VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                    CALL VecZeroEntries(Vec_flc,ierr)
+                    CALL GetVec_fcoulomb
+                    CALL GetVec_flc
+                    CALL VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                 END IF
                  ! Initial state should be analyzed to see if any initial slip 
-                 call WriteOutput_init
-              end if
-           end if 
-           if (nceqs-nceqs_ncf>0) then
-              allocate(flt_ss(nfnd,dmn),flt_p(nfnd))
-              call GetVec_flt_qs 
-              if (rank==0) call WriteOutput_flt_qs
-           end if
-           call Rscdt(fdt)
-        else ! Not poro
-           call VecGetLocalSize(Vec_U,j,ierr)
-           call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
+                 CALL WriteOutput_init
+              END IF
+           END IF 
+           IF (nceqs-nceqs_ncf>0) THEN
+              ALLOCATE(flt_ss(nfnd,dmn),flt_p(nfnd))
+              CALL GetVec_flt_qs 
+              IF (rank==0) CALL WriteOutput_flt_qs
+           END IF
+           CALL Rscdt(fdt)
+        ELSE ! Not poro
+           CALL VecGetLocalSize(Vec_U,j,ierr)
+           CALL VecGetOwnershipRange(Vec_U,j1,j2,ierr)
            j3=0; j4=0
-           do i=1,j
-              if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+           DO i=1,j
+              IF (j1+i-1>=dmn*nnds+nceqs_ncf) THEN
                  j3=j3+1
-              elseif (j1+i-1<dmn*nnds) then
+              ELSEIF (j1+i-1<dmn*nnds) THEN
                  j4=j4+1
-              end if
-           end do
-           allocate(workl(j3)); allocate(worku(j4))
+              END IF
+           END DO
+           ALLOCATE(workl(j3)); ALLOCATE(worku(j4))
            j3=0; j4=0
-           do i=1,j
-              if (j1+i-1>=dmn*nnds+nceqs_ncf) then
+           DO i=1,j
+              IF (j1+i-1>=dmn*nnds+nceqs_ncf) THEN
                  j3=j3+1
                  workl(j3)=j1+i-1
-              elseif (j1+i-1<dmn*nnds) then
+              ELSEIF (j1+i-1<dmn*nnds) THEN
                  j4=j4+1
                  worku(j4)=j1+i-1
-              end if
-           end do
-           j=size(worku)
-           call ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
+              END IF
+           END DO
+           j=SIZE(worku)
+           CALL ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
               RIu,ierr)
-           j=size(workl)
-           call ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,    &
+           j=SIZE(workl)
+           CALL ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values,    &
               RIl,ierr)
-           call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           call VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
-           if (nceqs>0) call VecDuplicate(Vec_Uu,Vec_flc,ierr)
-           if (lm_str==1) then
-              call VecDuplicate(Vec_Uu,Vec_SS,ierr)
-              call VecDuplicate(Vec_Uu,Vec_SH,ierr)
-              call VecZeroEntries(Vec_SS,ierr)
-              call VecZeroEntries(Vec_SH,ierr)
-              if (nceqs>0) then
-                 call VecDuplicate(Vec_Uu,Vec_f2s,ierr)
-                 call VecZeroEntries(Vec_f2s,ierr)
-              end if
-              call VecDuplicate(Vec_Uu,Vec_dip,ierr)
-              call VecZeroEntries(Vec_dip,ierr)
-              call VecDuplicate(Vec_Uu,Vec_nrm,ierr)
-              call VecZeroEntries(Vec_nrm,ierr)
-           end if
-           call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-           j=size(indxmap_u,1)
-           if (nceqs>0) then
-              call VecCreateSeq(Petsc_Comm_Self,j,Seq_fl,ierr)
-              call VecCreateSeq(Petsc_Comm_Self,j,Seq_flc,ierr)
-              call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),           &
+           CALL VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+           CALL VecDuplicate(Vec_Uu,Vec_fl,ierr) ! Ifl->-Gtuul
+           IF (nceqs>0) CALL VecDuplicate(Vec_Uu,Vec_flc,ierr)
+           IF (lm_str==1) THEN
+              CALL VecDuplicate(Vec_Uu,Vec_SS,ierr)
+              CALL VecDuplicate(Vec_Uu,Vec_SH,ierr)
+              CALL VecZeroEntries(Vec_SS,ierr)
+              CALL VecZeroEntries(Vec_SH,ierr)
+              IF (nceqs>0) THEN
+                 CALL VecDuplicate(Vec_Uu,Vec_f2s,ierr)
+                 CALL VecZeroEntries(Vec_f2s,ierr)
+              END IF
+              CALL VecDuplicate(Vec_Uu,Vec_dip,ierr)
+              CALL VecZeroEntries(Vec_dip,ierr)
+              CALL VecDuplicate(Vec_Uu,Vec_nrm,ierr)
+              CALL VecZeroEntries(Vec_nrm,ierr)
+           END IF
+           CALL VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+           j=SIZE(indxmap_u,1)
+           IF (nceqs>0) THEN
+              CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_fl,ierr)
+              CALL VecCreateSeq(Petsc_Comm_Self,j,Seq_flc,ierr)
+              CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),           &
                  Petsc_Copy_Values,From_u,ierr)
-              call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),           &
+              CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),           &
                  Petsc_Copy_Values,To_u,ierr)
-              call VecScatterCreate(Vec_fl,From_u,Seq_fl,To_u,Scatter_u,ierr)
-           elseif (lm_str==1) then
-              call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),           &
+              CALL VecScatterCreate(Vec_fl,From_u,Seq_fl,To_u,Scatter_u,ierr)
+           ELSEIF (lm_str==1) THEN
+              CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,2),           &
                  Petsc_Copy_Values,From_u,ierr)
-              call ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),           &
+              CALL ISCreateGeneral(Petsc_Comm_Self,j,indxmap_u(:,1),           &
                  Petsc_Copy_Values,To_u,ierr)
-              call VecScatterCreate(Vec_U,From_u,Seq_U,To_u,Scatter_u,ierr)
-           end if
-           if (nceqs>0) then
-              allocate(fl(size(indxmap_u,1)))
-              allocate(flc(size(indxmap_u,1)))
+              CALL VecScatterCreate(Vec_U,From_u,Seq_U,To_u,Scatter_u,ierr)
+           END IF
+           IF (nceqs>0) THEN
+              ALLOCATE(fl(SIZE(indxmap_u,1)))
+              ALLOCATE(flc(SIZE(indxmap_u,1)))
               ! Vector to communicate with dynamic LM
-              call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+              CALL VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               !call LM_s2d
               ! Extract lambda induced nodal force
-              if (vout==1) then
-                 call VecZeroEntries(Vec_fl,ierr)
-                 call VecZeroEntries(Vec_flc,ierr)
-                 call GetVec_flambda
-                 call GetVec_fl
-                 call GetVec_fcoulomb
-                 call GetVec_flc
-              else
+              IF (vout==1) THEN
+                 CALL VecZeroEntries(Vec_fl,ierr)
+                 CALL VecZeroEntries(Vec_flc,ierr)
+                 CALL GetVec_flambda
+                 CALL GetVec_fl
+                 CALL GetVec_fcoulomb
+                 CALL GetVec_flc
+              ELSE
                  ! Extract Coulomb force (needed by force-stress translation).
-                 call GetVec_fcoulomb
-              end if
-              call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-           end if
-           if (lm_str==1) then ! Scatter stress to nodes
-              call GetVec_Stress
-              call GetVec_S
-              if (nceqs>0) then
-                 call GetVec_f2s
-                 call GetVec_f2s_seq
-              else
-                 call GetVec_ft
-              end if
-              call GetVec_dip_nrm
-              if (vout==1) call WriteOutput_f2s
+                 CALL GetVec_fcoulomb
+              END IF
+              CALL VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+           END IF
+           IF (lm_str==1) THEN ! Scatter stress to nodes
+              CALL GetVec_Stress
+              CALL GetVec_S
+              IF (nceqs>0) THEN
+                 CALL GetVec_f2s
+                 CALL GetVec_f2s_seq
+              ELSE
+                 CALL GetVec_ft
+              END IF
+              CALL GetVec_dip_nrm
+              IF (vout==1) CALL WriteOutput_f2s
               ! Cleanup
-              call VecDestroy(Vec_dip,ierr)
-              call VecDestroy(Seq_dip,ierr)
-              call VecDestroy(Vec_nrm,ierr)
-              call VecDestroy(Seq_nrm,ierr)
-              call VecDestroy(Seq_f2s,ierr)
-              deallocate(f2s,dip,nrm)
-              if (nceqs-nceqs_ncf>0) then
-                 allocate(flt_ss(nfnd,dmn))
-                 call GetVec_flt_qs
-                 if (rank==0) call WriteOutput_flt_qs
-              end if
-           end if
+              CALL VecDestroy(Vec_dip,ierr)
+              CALL VecDestroy(Seq_dip,ierr)
+              CALL VecDestroy(Vec_nrm,ierr)
+              CALL VecDestroy(Seq_nrm,ierr)
+              CALL VecDestroy(Seq_f2s,ierr)
+              DEALLOCATE(f2s,dip,nrm)
+              IF (nceqs-nceqs_ncf>0) THEN
+                 ALLOCATE(flt_ss(nfnd,dmn))
+                 CALL GetVec_flt_qs
+                 IF (rank==0) CALL WriteOutput_flt_qs
+              END IF
+           END IF
            ! Write output
-           if (vout==1) call WriteOutput_x
+           IF (vout==1) CALL WriteOutput_x
            !if (rank==0 .and. nobs>0) call WriteOutput_obs
-           if (nobs_loc>0) call WriteOutput_obs
-        end if ! Poro or not
+           IF (nobs_loc>0) CALL WriteOutput_obs
+        END IF ! Poro or not
         ! Solution space is allocated differently for static and dynamic runs, 
         ! so we keep mat_K and Mat_K_dyn separate instead of
         ! call MatGetSubMatrix(Mat_K,RIu,RIu,Mat_Initial_Matrix,Mat_K_dyn,ierr)
 
         ! Initialize slip indicator and slip history
-        if (nceqs>0 .and. hyb>0) then
-           allocate(slip(nfnd),slip0(nfnd),slip_sum(nfnd)) 
+        IF (nceqs>0 .AND. hyb>0) THEN
+           ALLOCATE(slip(nfnd),slip0(nfnd),slip_sum(nfnd)) 
            slip(:)=0;slip_sum=0
            n_log_wave=0
            n_log_slip=0
-           if (rsf==1) allocate(mu_cap(nfnd),rsfv(nfnd),rsf_sta(nfnd_loc))
+           IF (rsf==1) ALLOCATE(mu_cap(nfnd),rsfv(nfnd),rsf_sta(nfnd_loc))
            trunc=f0
-           allocate(mu_hyb(nfnd))
-        end if
+           ALLOCATE(mu_hyb(nfnd))
+        END IF
 
         ! Start implicit time step
-        steps=int(ceiling(t/dt)); t_abs=f0
-        dyn=.false.; fail=.false.; n_log=0
-        do tstep=1,steps
+        steps=INT(CEILING(t/dt)); t_abs=f0
+        dyn=.FALSE.; fail=.FALSE.; n_log=0
+        DO tstep=1,steps
            t_abs=t_abs+dt
-           if (rank==0) print'(A11,I0)'," Time Step ",tstep
+           IF (rank==0) PRINT'(A11,I0)'," Time Step ",tstep
            ! Reform stiffness matrix, if needed
-           if (visco .and. (tstep==1 .or. maxval(mat(:,4))>f1)) then
-              call PrintMsg(" Reforming [K] ...")
-              call MatZeroEntries(Mat_K,ierr)
-              do i=1,nels
-                 call FormLocalK(i,k,indx,"Kv")
+           IF (visco .AND. (tstep==1 .OR. MAXVAL(mat(:,4))>f1)) THEN
+              CALL PrintMsg(" Reforming [K] ...")
+              CALL MatZeroEntries(Mat_K,ierr)
+              DO i=1,nels
+                 CALL FormLocalK(i,k,indx,"Kv")
                  indx=indxmap(indx,2)
-                 call MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,        &
+                 CALL MatSetValues(Mat_K,ef_eldof,indx,ef_eldof,indx,k,        &
                     Add_Values,ierr)
-              end do
+              END DO
               ! Account for constraint eqn's
-              if (rank==0 .and. nceqs>0) call ApplyConstraints
-              call MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
-              call MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
-           end if
+              IF (rank==0 .AND. nceqs>0) CALL ApplyConstraints
+              CALL MatAssemblyBegin(Mat_K,Mat_Final_Assembly,ierr)
+              CALL MatAssemblyEnd(Mat_K,Mat_Final_Assembly,ierr)
+           END IF
            ! Reform RHS
-           call VecZeroEntries(Vec_F,ierr)
-           call PrintMsg(" Reforming RHS ...")
-           if (poro) then
-              call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-              call MatMult(Mat_Kc,Vec_Up,Vec_I,ierr)
-              call VecScale(Vec_I,-dt,ierr)
-              call VecGetArrayF90(Vec_I,pntr,ierr)
+           CALL VecZeroEntries(Vec_F,ierr)
+           CALL PrintMsg(" Reforming RHS ...")
+           IF (poro) THEN
+              CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+              CALL MatMult(Mat_Kc,Vec_Up,Vec_I,ierr)
+              CALL VecScale(Vec_I,-dt,ierr)
+              CALL VecGetArrayF90(Vec_I,pntr,ierr)
               uup=pntr
-              call VecRestoreArrayF90(Vec_I,pntr,ierr)
-              j=size(uup)
-              call VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
-              call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+              CALL VecRestoreArrayF90(Vec_I,pntr,ierr)
+              j=SIZE(uup)
+              CALL VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
+              CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               ! Stabilize RHS
-              do i=1,nels
-                 call FormLocalHs(i,Hs,indxp)
+              DO i=1,nels
+                 CALL FormLocalHs(i,Hs,indxp)
                  indxp=indxmap(indxp,2)
-                 call VecSetValues(Vec_F,npel,indxp,Hs,Add_Values,ierr)
-              end do
-           end if
-           if (visco) then
-              do i=1,nels
-                 call ReformLocalRHS(i,f,indx)
+                 CALL VecSetValues(Vec_F,npel,indxp,Hs,Add_Values,ierr)
+              END DO
+           END IF
+           IF (visco) THEN
+              DO i=1,nels
+                 CALL ReformLocalRHS(i,f,indx)
                  indx=indxmap(indx,2)
-                 call VecSetValues(Vec_F,eldof,indx,f,Add_Values,ierr)
-              end do
-           end if
-           call FormRHS
-           if (fail) then 
-              call FaultSlip
+                 CALL VecSetValues(Vec_F,eldof,indx,f,Add_Values,ierr)
+              END DO
+           END IF
+           CALL FormRHS
+           IF (fail) THEN 
+              CALL FaultSlip
               ! Backup QS slip 
               qs_flt_slip=qs_flt_slip+tot_flt_slip
-              fail=.false.
-           end if
+              fail=.FALSE.
+           END IF
            ! Solve
-           call VecAssemblyBegin(Vec_F,ierr)
-           call VecAssemblyEnd(Vec_F,ierr)
-           call PrintMsg(" Solving ...")
-           call KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+           CALL VecAssemblyBegin(Vec_F,ierr)
+           CALL VecAssemblyEnd(Vec_F,ierr)
+           CALL PrintMsg(" Solving ...")
+           CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
            ! Reset dynamic (slip) solutions 
-           if (nceqs>0 .and. hyb>0) then
+           IF (nceqs>0 .AND. hyb>0) THEN
               tot_uu_dyn=f0
-              if (nobs_loc>0) tot_uu_dyn_obs=f0
+              IF (nobs_loc>0) tot_uu_dyn_obs=f0
               flt_slip=f0; tot_flt_slip=f0
-           end if
+           END IF
            n_log=n_log+1
-           call GetVec_U; tot_uu=tot_uu+uu
-           if (nobs_loc>0) then 
-              call GetVec_obs
+           CALL GetVec_U; tot_uu=tot_uu+uu
+           IF (nobs_loc>0) THEN 
+              CALL GetVec_obs
               tot_uu_obs=tot_uu_obs+uu_obs
-           end if
+           END IF
            ! Record absolute solution
-           if (poro .or. nceqs>0) call VecAXPY(Vec_Um,f1,Vec_U,ierr)
-           if (visco .or. lm_str==1) then
+           IF (poro .OR. nceqs>0) CALL VecAXPY(Vec_Um,f1,Vec_U,ierr)
+           IF (visco .OR. lm_str==1) THEN
               ! Recover stress
-              call PrintMsg(" Recovering stress ...")
-              do i=1,nels
-                 call RecoverVStress(i,stress)
-              end do
-              call GetVec_Stress
-              call GetVec_S
-              if (fault) then
-                 call GetVec_flt_qs
-                 if (rank==0) call WriteOutput_flt_qs
-              end if 
-           end if
+              CALL PrintMsg(" Recovering stress ...")
+              DO i=1,nels
+                 CALL RecoverVStress(i,stress)
+              END DO
+              CALL GetVec_Stress
+              CALL GetVec_S
+              IF (fault) THEN
+                 CALL GetVec_flt_qs
+                 IF (rank==0) CALL WriteOutput_flt_qs
+              END IF 
+           END IF
            ! Extract nodal force by p
-           if (poro) then
-              if (vout==1) then
+           IF (poro) THEN
+              IF (vout==1) THEN
                  ! Extract force by p
-                 call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
-                 call MatMult(Mat_H,Vec_Up,Vec_fp,ierr)
-                 call VecScale(Vec_fp,-f1,ierr)
-                 call GetVec_fp
-                 call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
+                 CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
+                 CALL MatMult(Mat_H,Vec_Up,Vec_fp,ierr)
+                 CALL VecScale(Vec_fp,-f1,ierr)
+                 CALL GetVec_fp
+                 CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
                  ! Extract fluid source by u
-                 call VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
-                 call MatMult(Mat_Ht,Vec_Uu,Vec_qu,ierr)
-                 call GetVec_qu
-                 call VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+                 CALL VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
+                 CALL MatMult(Mat_Ht,Vec_Uu,Vec_qu,ierr)
+                 CALL GetVec_qu
+                 CALL VecRestoreSubVector(Vec_Um,RIu,Vec_Uu,ierr)
                  ! Extract lambda and induced nodal f and q
-                 if (nceqs>0) then
-                    call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                    call VecZeroEntries(Vec_fl,ierr)
-                    call VecZeroEntries(Vec_flc,ierr)
-                    call VecZeroEntries(Vec_ql,ierr)
-                    call GetVec_flambda
-                    call GetVec_fl
-                    call GetVec_ql
-                    call GetVec_fcoulomb
-                    call GetVec_flc
-                    call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                 end if
+                 IF (nceqs>0) THEN
+                    CALL VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                    CALL VecZeroEntries(Vec_fl,ierr)
+                    CALL VecZeroEntries(Vec_flc,ierr)
+                    CALL VecZeroEntries(Vec_ql,ierr)
+                    CALL GetVec_flambda
+                    CALL GetVec_fl
+                    CALL GetVec_ql
+                    CALL GetVec_fcoulomb
+                    CALL GetVec_flc
+                    CALL VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                 END IF
                  ! Write output
-                 if (mod(tstep,frq)==0) call WriteOutput_x
-              end if
+                 IF (MOD(tstep,frq)==0) CALL WriteOutput_x
+              END IF
               !if (rank==0 .and. nobs>0) call WriteOutput_obs
-              if (nobs_loc>0) call WriteOutput_obs
-           else
-              if (vout==1) then
+              IF (nobs_loc>0) CALL WriteOutput_obs
+           ELSE
+              IF (vout==1) THEN
                  ! Extract lambda and induced nodal f
-                 if (nceqs>0) then
-                    call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                    call VecZeroEntries(Vec_fl,ierr)
-                    call VecZeroEntries(Vec_flc,ierr)
-                    call GetVec_flambda
-                    call GetVec_fl
-                    call GetVec_fcoulomb
-                    call GetVec_flc
-                    call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-                 end if
+                 IF (nceqs>0) THEN
+                    CALL VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                    CALL VecZeroEntries(Vec_fl,ierr)
+                    CALL VecZeroEntries(Vec_flc,ierr)
+                    CALL GetVec_flambda
+                    CALL GetVec_fl
+                    CALL GetVec_fcoulomb
+                    CALL GetVec_flc
+                    CALL VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+                 END IF
                  ! Write output
-                 if (mod(tstep,frq)==0) call WriteOutput_x
-              end if
+                 IF (MOD(tstep,frq)==0) CALL WriteOutput_x
+              END IF
               !if (rank==0 .and. nobs>0) call WriteOutput_obs
-              if (nobs_loc>0) call WriteOutput_obs
-           end if
+              IF (nobs_loc>0) CALL WriteOutput_obs
+           END IF
 
            ! Determine if the fault will fail by LM 
-           if (nceqs-nceqs_ncf>0 .and. hyb>0) then
-              call VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
-              call LM_s2d  
-              call VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+           IF (nceqs-nceqs_ncf>0 .AND. hyb>0) THEN
+              CALL VecGetSubVector(Vec_Um,RIl,Vec_Ul,ierr)
+              CALL LM_s2d  
+              CALL VecRestoreSubVector(Vec_Um,RIl,Vec_Ul,ierr)
               ! Determine if the fault will fail
-              call GetSlip_sta
-              rslip=real(sum(slip))/real(size(slip))
-              if (rank==0) print'(F0.2,A)',rslip*100.0,"% fault critical."
-              if (rslip>f0) then ! Failure threshold
-                 dyn=.true. 
-              end if
-           end if
+              CALL GetSlip_sta
+              rslip=REAL(SUM(slip))/REAL(SIZE(slip))
+              IF (rank==0) PRINT'(F0.2,A)',rslip*100.0,"% fault critical."
+              IF (rslip>f0) THEN ! Failure threshold
+                 dyn=.TRUE. 
+              END IF
+           END IF
 
            ! Prepare variables for hybrid run
-           if (dyn) then
+           IF (dyn) THEN
               ! Prepare the working space for the dynamic model
-              call VecZeroEntries(Vec_U_dyn,ierr)
-              call VecDuplicate(Vec_U_dyn,Vec_Um_dyn,ierr)
-              call VecDuplicate(Vec_U_dyn,Vec_Up_dyn,ierr)
-              call VecDuplicate(Vec_U_dyn,Vec_U_dyn_tot,ierr)
-              call VecZeroEntries(Vec_Um_dyn,ierr)
-              call VecZeroEntries(Vec_Up_dyn,ierr)
-              call VecZeroEntries(Vec_U_dyn_tot,ierr)
-              call VecDuplicateVecsF90(Vec_U_dyn,6,Vec_W,ierr)
-              if (n_log_dyn==0) then! Create full Gt
-                 call GetMat_Gt
-                 call MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
-                 call MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
-              end if
-              call MatCreateTranspose(Mat_Gt,Mat_G,ierr)
-              call VecDuplicate(Vec_lambda_sta,Vec_lambda,ierr)
+              CALL VecZeroEntries(Vec_U_dyn,ierr)
+              CALL VecDuplicate(Vec_U_dyn,Vec_Um_dyn,ierr)
+              CALL VecDuplicate(Vec_U_dyn,Vec_Up_dyn,ierr)
+              CALL VecDuplicate(Vec_U_dyn,Vec_U_dyn_tot,ierr)
+              CALL VecZeroEntries(Vec_Um_dyn,ierr)
+              CALL VecZeroEntries(Vec_Up_dyn,ierr)
+              CALL VecZeroEntries(Vec_U_dyn_tot,ierr)
+              CALL VecDuplicateVecsF90(Vec_U_dyn,6,Vec_W,ierr)
+              IF (n_log_dyn==0) THEN! Create full Gt
+                 CALL GetMat_Gt
+                 CALL MatAssemblyBegin(Mat_Gt,Mat_Final_Assembly,ierr)
+                 CALL MatAssemblyEnd(Mat_Gt,Mat_Final_Assembly,ierr)
+              END IF
+              CALL MatCreateTranspose(Mat_Gt,Mat_G,ierr)
+              CALL VecDuplicate(Vec_lambda_sta,Vec_lambda,ierr)
               ! GMinvGt is replaced by its inverse, assuming GMinvGt is diagonal
-              call MatPtAP(Mat_Minv,Mat_Gt,Mat_Initial_Matrix,f1,              &
+              CALL MatPtAP(Mat_Minv,Mat_Gt,Mat_Initial_Matrix,f1,              &
                  Mat_GMinvGt,ierr)
-              call VecDuplicateVecsF90(Vec_lambda,2,Vec_Wlm,ierr)
-              call MatGetDiagonal(Mat_GMinvGt,Vec_Wlm(1),ierr)
-              call MatSetOption(Mat_GMinvGt,Mat_New_Nonzero_Allocation_Err,    &
+              CALL VecDuplicateVecsF90(Vec_lambda,2,Vec_Wlm,ierr)
+              CALL MatGetDiagonal(Mat_GMinvGt,Vec_Wlm(1),ierr)
+              CALL MatSetOption(Mat_GMinvGt,Mat_New_Nonzero_Allocation_Err,    &
                  PETSC_FALSE,ierr)
-              call VecReciprocal(Vec_Wlm(1),ierr)
-              call MatDiagonalSet(Mat_GMinvGt,Vec_Wlm(1),Insert_Values,ierr)
-              call VecZeroEntries(Vec_Wlm(1),ierr)
+              CALL VecReciprocal(Vec_Wlm(1),ierr)
+              CALL MatDiagonalSet(Mat_GMinvGt,Vec_Wlm(1),Insert_Values,ierr)
+              CALL VecZeroEntries(Vec_Wlm(1),ierr)
               ! Dynamic constraint I=0 
-              call VecDuplicate(Vec_lambda,Vec_I_dyn,ierr)
-              call VecZeroEntries(Vec_I_dyn,ierr)
+              CALL VecDuplicate(Vec_lambda,Vec_I_dyn,ierr)
+              CALL VecZeroEntries(Vec_I_dyn,ierr)
               ! Pass pseudo velocity to U_dyn
-              if (rsf==1 .and. tstep>1) then
-                 call Rsfv2Dyn 
+              IF (rsf==1 .AND. tstep>1) THEN
+                 CALL Rsfv2Dyn 
                  rsf_sta=0
-              end if
-              call VecDuplicate(Vec_lambda,Vec_lambda_tot,ierr)
-              call VecZeroEntries(Vec_lambda_tot,ierr)
+              END IF
+              CALL VecDuplicate(Vec_lambda,Vec_lambda_tot,ierr)
+              CALL VecZeroEntries(Vec_lambda_tot,ierr)
               ! Form 1/dt^2GMinvGt assuming it doesnt change with time
-              call MatScale(Mat_GMinvGt,f1/dt_dyn**2,ierr)
-              call PrintMsg("Hybrid Solving ...")
-              steps_dyn=int(ceiling(t_dyn/dt_dyn)); t_hyb=t_abs
-              ih=0; t_sta=f0; fail=.true.;crp=.false.
-           end if
+              CALL MatScale(Mat_GMinvGt,f1/dt_dyn**2,ierr)
+              CALL PrintMsg("Hybrid Solving ...")
+              steps_dyn=INT(CEILING(t_dyn/dt_dyn)); t_hyb=t_abs
+              ih=0; t_sta=f0; fail=.TRUE.;crp=.FALSE.
+           END IF
            
            ! Explicit/implicit hybrid step for rupture propagation
-           do while (dyn .or. (t_sta>f0 .and. (t_sta<t_lim) .and. .not. crp))
+           DO WHILE (dyn .OR. (t_sta>f0 .AND. (t_sta<t_lim) .AND. .NOT. crp))
               ! Explicit time step
-              do tstep_dyn=0,steps_dyn
+              DO tstep_dyn=0,steps_dyn
                  t_hyb=t_hyb+dt_dyn
                  ! Up=Minv(dt^2(F-KU)-dt(C(U-Um)))+2U-Um
-                 call MatMult(Mat_K_dyn,Vec_U_dyn,Vec_W(1),ierr)
-                 call VecScale(Vec_W(1),-f1*dt_dyn**2,ierr)
-                 call VecWAXPY(Vec_W(2),-f1,Vec_Um_dyn,Vec_U_dyn,ierr)
-                 call MatMult(Mat_K_dyn,Vec_W(2),Vec_W(3),ierr)
-                 call MatMult(Mat_M,Vec_W(2),Vec_W(4),ierr)
-                 call VecAXPY(Vec_W(4),beta,Vec_W(3),ierr)
-                 call VecScale(Vec_W(4),dt_dyn,ierr)
-                 call VecWAXPY(Vec_W(5),-f1,Vec_W(4),Vec_W(1),ierr)
-                 call MatMult(Mat_Minv,Vec_W(5),Vec_W(6),ierr)
-                 call VecWAXPY(Vec_Up_dyn,f2,Vec_U_dyn,Vec_W(6),ierr)
-                 call VecAXPY(Vec_Up_dyn,-f1,Vec_Um_dyn,ierr)
+                 CALL MatMult(Mat_K_dyn,Vec_U_dyn,Vec_W(1),ierr)
+                 CALL VecScale(Vec_W(1),-f1*dt_dyn**2,ierr)
+                 CALL VecWAXPY(Vec_W(2),-f1,Vec_Um_dyn,Vec_U_dyn,ierr)
+                 CALL MatMult(Mat_K_dyn,Vec_W(2),Vec_W(3),ierr)
+                 CALL MatMult(Mat_M,Vec_W(2),Vec_W(4),ierr)
+                 CALL VecAXPY(Vec_W(4),beta,Vec_W(3),ierr)
+                 CALL VecScale(Vec_W(4),dt_dyn,ierr)
+                 CALL VecWAXPY(Vec_W(5),-f1,Vec_W(4),Vec_W(1),ierr)
+                 CALL MatMult(Mat_Minv,Vec_W(5),Vec_W(6),ierr)
+                 CALL VecWAXPY(Vec_Up_dyn,f2,Vec_U_dyn,Vec_W(6),ierr)
+                 CALL VecAXPY(Vec_Up_dyn,-f1,Vec_Um_dyn,ierr)
                  ! Form lambda=(GUp-Flm)/(dt^2GMinvGt)
-                 call MatMult(Mat_G,Vec_Up_dyn,Vec_Wlm(1),ierr)
-                 call VecWAXPY(Vec_Wlm(2),-f1,Vec_I_dyn,Vec_Wlm(1),ierr)
-                 call MatMult(Mat_GMinvGt,Vec_Wlm(2),Vec_lambda,ierr)
-                 if (rsf==1 .and. tstep>1 .and. tstep_dyn+ih==0) then 
+                 CALL MatMult(Mat_G,Vec_Up_dyn,Vec_Wlm(1),ierr)
+                 CALL VecWAXPY(Vec_Wlm(2),-f1,Vec_I_dyn,Vec_Wlm(1),ierr)
+                 CALL MatMult(Mat_GMinvGt,Vec_Wlm(2),Vec_lambda,ierr)
+                 IF (rsf==1 .AND. tstep>1 .AND. tstep_dyn+ih==0) THEN 
                      ! Skip friction law, and reset constraint 
-                     call VecZeroEntries(Vec_I_dyn,ierr)
-                 else 
+                     CALL VecZeroEntries(Vec_I_dyn,ierr)
+                 ELSE 
                     ! Cap the nodal LM not to exceed max friction
-                    call CapLM_dyn
-                 end if
-                 call VecAXPY(Vec_lambda_tot,f1,Vec_lambda,ierr)
+                    CALL CapLM_dyn
+                 END IF
+                 CALL VecAXPY(Vec_lambda_tot,f1,Vec_lambda,ierr)
                  ! Form Up=Up-dt^2(Minv(Gtlambda))
-                 call MatMult(Mat_Gt,Vec_lambda,Vec_W(1),ierr)
-                 call MatMult(Mat_Minv,Vec_W(1),Vec_W(2),ierr)
-                 call VecAXPY(Vec_Up_dyn,-dt_dyn**2,Vec_W(2),ierr)
+                 CALL MatMult(Mat_Gt,Vec_lambda,Vec_W(1),ierr)
+                 CALL MatMult(Mat_Minv,Vec_W(1),Vec_W(2),ierr)
+                 CALL VecAXPY(Vec_Up_dyn,-dt_dyn**2,Vec_W(2),ierr)
                  ! Update solution
-                 call VecCopy(Vec_U_dyn,Vec_Um_dyn,ierr)
-                 call VecCopy(Vec_Up_dyn,Vec_U_dyn,ierr)
-                 call VecAXPY(Vec_U_dyn_tot,f1,Vec_U_dyn,ierr)
+                 CALL VecCopy(Vec_U_dyn,Vec_Um_dyn,ierr)
+                 CALL VecCopy(Vec_Up_dyn,Vec_U_dyn,ierr)
+                 CALL VecAXPY(Vec_U_dyn_tot,f1,Vec_U_dyn,ierr)
                  ! Extract dynamic solution
-                 if (.not. dyn) then
-                    dyn=.true.
-                    call GetVec_U
+                 IF (.NOT. dyn) THEN
+                    dyn=.TRUE.
+                    CALL GetVec_U
                     tot_uu_dyn=tot_uu_dyn+uu_dyn
-                    if (nobs_loc>0) then
-                       call GetVec_obs
+                    IF (nobs_loc>0) THEN
+                       CALL GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs 
-                    end if
-                    if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
-                    dyn=.false.
-                 else
-                    call GetVec_U
+                       IF (MOD(n_log_dyn,frq_wave)==0) CALL WriteOutput_obs 
+                    END IF
+                    IF (MOD(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
+                    dyn=.FALSE.
+                 ELSE
+                    CALL GetVec_U
                     tot_uu_dyn=tot_uu_dyn+uu_dyn
-                    if (nobs_loc>0) then
-                       call GetVec_obs
+                    IF (nobs_loc>0) THEN
+                       CALL GetVec_obs
                        tot_uu_dyn_obs=tot_uu_dyn_obs+uu_dyn_obs
                        uu_dyn_obs=uu_dyn_obs/dt_dyn
-                       if (mod(n_log_dyn,frq_wave)==0) call WriteOutput_obs
-                    end if
-                    if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
-                 end if
+                       IF (MOD(n_log_dyn,frq_wave)==0) CALL WriteOutput_obs
+                    END IF
+                    IF (MOD(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
+                 END IF
                  ! Evaluated FD grid movement
-                 if (ngp_loc>0 .and. mod(n_log_dyn,frq_wave)==0 .and. fdout==1) then  
-                    call GetVec_fd
-                    call WriteOutput_fd
-                 end if
+                 IF (ngp_loc>0 .AND. MOD(n_log_dyn,frq_wave)==0 .AND. fdout==1) THEN  
+                    CALL GetVec_fd
+                    CALL WriteOutput_fd
+                 END IF
                  ! Extract and output temporal fault slip
-                 call MatMult(Mat_G,Vec_U_dyn,Vec_Wlm(1),ierr)
-                 call VecGetArrayF90(Vec_Wlm(1),pntr,ierr)
+                 CALL MatMult(Mat_G,Vec_U_dyn,Vec_Wlm(1),ierr)
+                 CALL VecGetArrayF90(Vec_Wlm(1),pntr,ierr)
                  flt_slip=pntr
                  tot_flt_slip=tot_flt_slip+flt_slip
-                 call VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
-                 if (mod(n_log_dyn,frq_slip)==0) then 
-                    call WriteOutput_slip
+                 CALL VecRestoreArrayF90(Vec_Wlm(1),pntr,ierr)
+                 IF (MOD(n_log_dyn,frq_slip)==0) THEN 
+                    CALL WriteOutput_slip
                     n_log_slip=n_log_slip+1
-                 end if
+                 END IF
                  ! Export dynamic snapshot
-                 dsp_dyn=.true.
-                 if (vout==1) then
+                 dsp_dyn=.TRUE.
+                 IF (vout==1) THEN
                     uu_dyn=uu_dyn/dt_dyn
-                    if (mod(n_log_dyn,frq_dyn)==0) call WriteOutput
-                 end if
-                 dsp_dyn=.false.
+                    IF (MOD(n_log_dyn,frq_dyn)==0) CALL WriteOutput
+                 END IF
+                 dsp_dyn=.FALSE.
                  n_log_dyn=n_log_dyn+1
-              end do ! Explicit loop 
+              END DO ! Explicit loop 
               ! Assess the fault status 
-              if (dyn) call GetSlip_dyn
-              rslip=real(sum(slip))/real(size(slip))
-              if ((.not. sum(slip)>0) .or. (.not. dyn)) then
-                 dyn=.false. ! Failure threshold
+              IF (dyn) CALL GetSlip_dyn
+              rslip=REAL(SUM(slip))/REAL(SIZE(slip))
+              IF ((.NOT. SUM(slip)>0) .OR. (.NOT. dyn)) THEN
+                 dyn=.FALSE. ! Failure threshold
                  t_sta=t_sta+t_dyn
-              end if
-              if (rank==0 .and. dyn) print'(F0.2,A)',rslip*100.0,              &
+              END IF
+              IF (rank==0 .AND. dyn) PRINT'(F0.2,A)',rslip*100.0,              &
                  "% fault slipping."
-              if (rank==0 .and. crp) print'(A)',"Aseismic"
-              if (rank==0 .and. .not. (dyn .or. crp)) print'(A,F0.4,A,F0.4)',  &
+              IF (rank==0 .AND. crp) PRINT'(A)',"Aseismic"
+              IF (rank==0 .AND. .NOT. (dyn .OR. crp)) PRINT'(A,F0.4,A,F0.4)',  &
                  "Wave traveling ",t_sta,"/",t_lim
               ! Turn off "dyn" for debug if the fault cannot stabilize
-              if (dble(ih+1)*t_dyn>=t_lim .and. dyn) then
-                 dyn=.false.
+              IF (DBLE(ih+1)*t_dyn>=t_lim .AND. dyn) THEN
+                 dyn=.FALSE.
                  slip=0
                  t_sta=t_sta+t_dyn
-              end if
+              END IF
               ! Hybrid iteration count
               ih=ih+1
-           end do ! Hybrid run
-           if (fail) then
-              if (rank==0 .and. nobs>0) then 
-                 call WriteOutput_log
-                 call WriteOutput_log_wave
-                 if (nceqs>0) call WriteOutput_log_slip
-              end if
+           END DO ! Hybrid run
+           IF (fail) THEN
+              IF (rank==0 .AND. nobs>0) THEN 
+                 CALL WriteOutput_log
+                 CALL WriteOutput_log_wave
+                 IF (nceqs>0) CALL WriteOutput_log_slip
+              END IF
               ! Latest fault stress (Vec_lambda_sta0)
-              call GetVec_lambda_hyb(trunc) ! Last time truncation
+              CALL GetVec_lambda_hyb(trunc) ! Last time truncation
               ! Cleanup dynamics
-              call VecDestroy(Vec_Um_dyn,ierr)
-              call VecDestroy(Vec_Up_dyn,ierr)
-              call VecDestroy(Vec_U_dyn_tot,ierr)
-              call VecDestroy(Vec_I_dyn,ierr)
-              call VecDestroyVecsF90(6,Vec_W,ierr)
-              call VecDestroy(Vec_lambda,ierr)
-              call VecDestroy(Vec_lambda_tot,ierr)
-              call VecDestroyVecsF90(2,Vec_Wlm,ierr)
-              call MatDestroy(Mat_G,ierr)
-              call MatDestroy(Mat_GMinvGt,ierr)
-           else
+              CALL VecDestroy(Vec_Um_dyn,ierr)
+              CALL VecDestroy(Vec_Up_dyn,ierr)
+              CALL VecDestroy(Vec_U_dyn_tot,ierr)
+              CALL VecDestroy(Vec_I_dyn,ierr)
+              CALL VecDestroyVecsF90(6,Vec_W,ierr)
+              CALL VecDestroy(Vec_lambda,ierr)
+              CALL VecDestroy(Vec_lambda_tot,ierr)
+              CALL VecDestroyVecsF90(2,Vec_Wlm,ierr)
+              CALL MatDestroy(Mat_G,ierr)
+              CALL MatDestroy(Mat_GMinvGt,ierr)
+           ELSE
               ! Backup fault stress
-              call VecCopy(Vec_lambda_sta,Vec_lambda_sta0,ierr)
-           end if
-        end do ! Implicit time steps
-     elseif (.not. poro) then ! One time static
-        call VecDuplicate(Vec_U,Vec_SS,ierr)
-        call VecDuplicate(Vec_U,Vec_SH,ierr)
-        call VecZeroEntries(Vec_SS,ierr)
-        call VecZeroEntries(Vec_SH,ierr)
-        call GetVec_Stress
+              CALL VecCopy(Vec_lambda_sta,Vec_lambda_sta0,ierr)
+           END IF
+        END DO ! Implicit time steps
+     ELSEIF (.NOT. poro) THEN ! One time static
+        CALL VecDuplicate(Vec_U,Vec_SS,ierr)
+        CALL VecDuplicate(Vec_U,Vec_SH,ierr)
+        CALL VecZeroEntries(Vec_SS,ierr)
+        CALL VecZeroEntries(Vec_SH,ierr)
+        CALL GetVec_Stress
         Scatter_u=Scatter
-        call GetVec_S
-        if (vout==1) call WriteOutput_x
-        if (nobs_loc>0) call WriteOutput_obs
-     end if ! Assert implicit time
-     crp=.true.
-     if (rank==0) call WriteOutput_log 
+        CALL GetVec_S
+        IF (vout==1) CALL WriteOutput_x
+        IF (nobs_loc>0) CALL WriteOutput_obs
+     END IF ! Assert implicit time
+     crp=.TRUE.
+     IF (rank==0) CALL WriteOutput_log 
      ! Cleanup hybrid
-     if (poro) deallocate(uup,kc,indxp,Hs,work,fp,qu)
-     if (nceqs>0) then 
-        deallocate(fl,flc,workl,worku)
-        if (lm_str==1) deallocate(ss,sh)
-        if (poro) deallocate(ql)
-     end if
-     call MatDestroy(Mat_Kc,ierr)
-     call MatDestroy(Mat_H,ierr)
-     call MatDestroy(Mat_Ht,ierr)
-     call MatDestroy(Mat_K_dyn,ierr)
-     call MatDestroy(Mat_Gt,ierr)
-     call MatDestroy(Mat_M,ierr)
-     call MatDestroy(Mat_Minv,ierr)
-     call VecDestroy(Vec_I,ierr)
-     call VecDestroy(Vec_fp,ierr)
-     call VecDestroy(Vec_Up,ierr)
-     call VecDestroy(Vec_Uu,ierr)
-     call VecDestroy(Vec_Um,ierr)
-     call VecDestroy(Vec_qu,ierr)
-     call VecDestroy(Vec_Ul,ierr)
-     call VecDestroy(Vec_lambda_sta,ierr)
-     call VecDestroy(Vec_lambda_sta0,ierr)
-     call VecDestroy(Vec_fl,ierr)
-     call VecDestroy(Vec_flc,ierr)
-     call VecDestroy(Vec_f2s,ierr)
-     call VecDestroy(Vec_ql,ierr)
-     call VecDestroy(Vec_U_dyn,ierr)
-     call VecDestroy(Vec_SS,ierr)
-     call VecDestroy(Vec_SH,ierr)
-     call VecDestroy(Seq_fp,ierr)
-     call VecDestroy(Seq_qu,ierr)
-     call VecDestroy(Seq_fl,ierr)
-     call VecDestroy(Seq_flc,ierr)
-     call VecDestroy(Seq_ql,ierr)
-     call VecDestroy(Seq_U_dyn,ierr)
-     call VecDestroy(Seq_SS,ierr)
-     call VecDestroy(Seq_SH,ierr)
-     call ISDestroy(RI,ierr)
-     call ISDestroy(RIu,ierr)
-     call ISDestroy(RIl,ierr)
-     call ISDestroy(From_u,ierr)
-     call ISDestroy(To_u,ierr)   
-     call ISDestroy(From_p,ierr)
-     call ISDestroy(To_p,ierr)
-     call VecScatterDestroy(Scatter_u,ierr)
-     call VecScatterDestroy(Scatter_q,ierr)
-     call VecScatterDestroy(Scatter_s2d,ierr)
-     call VecScatterDestroy(Scatter_dyn,ierr)
-     call KSPDestroy(Krylov,ierr)
+     IF (poro) DEALLOCATE(uup,kc,indxp,Hs,work,fp,qu)
+     IF (nceqs>0) THEN 
+        DEALLOCATE(fl,flc,workl,worku)
+        IF (lm_str==1) DEALLOCATE(ss,sh)
+        IF (poro) DEALLOCATE(ql)
+     END IF
+     CALL MatDestroy(Mat_Kc,ierr)
+     CALL MatDestroy(Mat_H,ierr)
+     CALL MatDestroy(Mat_Ht,ierr)
+     CALL MatDestroy(Mat_K_dyn,ierr)
+     CALL MatDestroy(Mat_Gt,ierr)
+     CALL MatDestroy(Mat_M,ierr)
+     CALL MatDestroy(Mat_Minv,ierr)
+     CALL VecDestroy(Vec_I,ierr)
+     CALL VecDestroy(Vec_fp,ierr)
+     CALL VecDestroy(Vec_Up,ierr)
+     CALL VecDestroy(Vec_Uu,ierr)
+     CALL VecDestroy(Vec_Um,ierr)
+     CALL VecDestroy(Vec_qu,ierr)
+     CALL VecDestroy(Vec_Ul,ierr)
+     CALL VecDestroy(Vec_lambda_sta,ierr)
+     CALL VecDestroy(Vec_lambda_sta0,ierr)
+     CALL VecDestroy(Vec_fl,ierr)
+     CALL VecDestroy(Vec_flc,ierr)
+     CALL VecDestroy(Vec_f2s,ierr)
+     CALL VecDestroy(Vec_ql,ierr)
+     CALL VecDestroy(Vec_U_dyn,ierr)
+     CALL VecDestroy(Vec_SS,ierr)
+     CALL VecDestroy(Vec_SH,ierr)
+     CALL VecDestroy(Seq_fp,ierr)
+     CALL VecDestroy(Seq_qu,ierr)
+     CALL VecDestroy(Seq_fl,ierr)
+     CALL VecDestroy(Seq_flc,ierr)
+     CALL VecDestroy(Seq_ql,ierr)
+     CALL VecDestroy(Seq_U_dyn,ierr)
+     CALL VecDestroy(Seq_SS,ierr)
+     CALL VecDestroy(Seq_SH,ierr)
+     CALL ISDestroy(RI,ierr)
+     CALL ISDestroy(RIu,ierr)
+     CALL ISDestroy(RIl,ierr)
+     CALL ISDestroy(From_u,ierr)
+     CALL ISDestroy(To_u,ierr)   
+     CALL ISDestroy(From_p,ierr)
+     CALL ISDestroy(To_p,ierr)
+     CALL VecScatterDestroy(Scatter_u,ierr)
+     CALL VecScatterDestroy(Scatter_q,ierr)
+     CALL VecScatterDestroy(Scatter_s2d,ierr)
+     CALL VecScatterDestroy(Scatter_dyn,ierr)
+     CALL KSPDestroy(Krylov,ierr)
   END IF ! Fault solver
   !---------------------------------------------------------------------------80
 
   !===========================================================================80
   ! Explicit (Green's function) Solver
   IF (stype=="explicit" .AND. t>f0 .AND. dt>f0 .AND. t>=dt) THEN
-     steps=int(ceiling(t/dt))
+     steps=INT(CEILING(t/dt))
      ! Initialize work vectors
-     call VecDuplicate(Vec_U,Vec_Um,ierr)
-     call VecDuplicate(Vec_U,Vec_Up,ierr)
-     call VecDuplicateVecsF90(Vec_U,6,Vec_W,ierr)
-     if (nceqs>0) then
-        if (gf) call GetMat_Gt
-        call MatCreateTranspose(Mat_Gt,Mat_G,ierr)
-        call VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs,Vec_lambda,ierr)
-        call VecDuplicate(Vec_lambda,Vec_I,ierr)
-        call VecDuplicateVecsF90(Vec_lambda,2,Vec_Wlm,ierr)
-     end if
+     CALL VecDuplicate(Vec_U,Vec_Um,ierr)
+     CALL VecDuplicate(Vec_U,Vec_Up,ierr)
+     CALL VecDuplicateVecsF90(Vec_U,6,Vec_W,ierr)
+     IF (nceqs>0) THEN
+        IF (gf) CALL GetMat_Gt
+        CALL MatCreateTranspose(Mat_Gt,Mat_G,ierr)
+        CALL VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs,Vec_lambda,ierr)
+        CALL VecDuplicate(Vec_lambda,Vec_I,ierr)
+        CALL VecDuplicateVecsF90(Vec_lambda,2,Vec_Wlm,ierr)
+     END IF
      ! Start time stepping
-     call PrintMsg("Solving ...") ! Up=Minv(dt^2(F-KU)-dt(C(U-Um)))+2U-Um
-     call VecGetOwnershipRange(Vec_U,j1,j2,ierr)
-     if (rank==nprcs-1) print'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
+     CALL PrintMsg("Solving ...") ! Up=Minv(dt^2(F-KU)-dt(C(U-Um)))+2U-Um
+     CALL VecGetOwnershipRange(Vec_U,j1,j2,ierr)
+     IF (rank==nprcs-1) PRINT'(I0,A,I0,A)',j2+nceqs," dofs on ", nprcs,        &
         " processors."
      ng=1
-     if (nobs_loc>0) tot_uu_dyn_obs=f0
-     do igf=1,nceqs
-        if (ng>10) exit ! Max mumber of GFs
+     IF (nobs_loc>0) tot_uu_dyn_obs=f0
+     DO igf=1,nceqs
+        IF (ng>10) EXIT ! Max mumber of GFs
         j=(igf-1)/dmn+1
-        do tstep=0,steps
-           if (gf .and. frc(j)<1) then
-              exit
-           elseif (gf .and. tstep==0) then
-              if (mod(igf,dmn)==0) then
-                 exit
-              else
+        DO tstep=0,steps
+           IF (gf .AND. frc(j)<1) THEN
+              EXIT
+           ELSEIF (gf .AND. tstep==0) THEN
+              IF (MOD(igf,dmn)==0) THEN
+                 EXIT
+              ELSE
                 ng=ng+1
-                if (rank==0) print'(A,I0,A,I0)',"Source ",j," component ",     &
-                   mod(igf,dmn)
-              end if
-           end if
-           if (rank==0 .and. .not. gf) print'(A12,I0)'," Time Step ",tstep
+                IF (rank==0) PRINT'(A,I0,A,I0)',"Source ",j," component ",     &
+                   MOD(igf,dmn)
+              END IF
+           END IF
+           IF (rank==0 .AND. .NOT. gf) PRINT'(A12,I0)'," Time Step ",tstep
            ! Solve
-           call MatMult(Mat_K,Vec_U,Vec_W(1),ierr)
-           call VecAYPX(Vec_W(1),-f1,Vec_F,ierr)
-           call VecScale(Vec_W(1),dt**2,ierr)
-           call VecWAXPY(Vec_W(2),-f1,Vec_Um,Vec_U,ierr)
-           call MatMult(Mat_K,Vec_W(2),Vec_W(3),ierr)
-           call MatMult(Mat_M,Vec_W(2),Vec_W(4),ierr)
-           call VecAXPY(Vec_W(4),beta,Vec_W(3),ierr)
-           call VecScale(Vec_W(4),dt,ierr)
-           call VecWAXPY(Vec_W(5),-f1,Vec_W(4),Vec_W(1),ierr)
-           call MatMult(Mat_Minv,Vec_W(5),Vec_W(6),ierr)
-           call VecWAXPY(Vec_Up,f2,Vec_U,Vec_W(6),ierr)
-           call VecAXPY(Vec_Up,-f1,Vec_Um,ierr)
-           if (nceqs>0) then
-              if (tstep==0) then
-                 call MatPtAP(Mat_Minv,Mat_Gt,Mat_Initial_Matrix,f1,           &
+           CALL MatMult(Mat_K,Vec_U,Vec_W(1),ierr)
+           CALL VecAYPX(Vec_W(1),-f1,Vec_F,ierr)
+           CALL VecScale(Vec_W(1),dt**2,ierr)
+           CALL VecWAXPY(Vec_W(2),-f1,Vec_Um,Vec_U,ierr)
+           CALL MatMult(Mat_K,Vec_W(2),Vec_W(3),ierr)
+           CALL MatMult(Mat_M,Vec_W(2),Vec_W(4),ierr)
+           CALL VecAXPY(Vec_W(4),beta,Vec_W(3),ierr)
+           CALL VecScale(Vec_W(4),dt,ierr)
+           CALL VecWAXPY(Vec_W(5),-f1,Vec_W(4),Vec_W(1),ierr)
+           CALL MatMult(Mat_Minv,Vec_W(5),Vec_W(6),ierr)
+           CALL VecWAXPY(Vec_Up,f2,Vec_U,Vec_W(6),ierr)
+           CALL VecAXPY(Vec_Up,-f1,Vec_Um,ierr)
+           IF (nceqs>0) THEN
+              IF (tstep==0) THEN
+                 CALL MatPtAP(Mat_Minv,Mat_Gt,Mat_Initial_Matrix,f1,           &
                     Mat_GMinvGt,ierr)
                  ! GMinvGt is replaced by its inverse, assuming GMinvGt 
                  ! is diagonal
-                 call MatGetDiagonal(Mat_GMinvGt,Vec_Wlm(1),ierr)
-                 call VecReciprocal(Vec_Wlm(1),ierr)
-                 call MatDiagonalSet(Mat_GMinvGt,Vec_Wlm(1),Insert_Values,ierr)
-                 call VecZeroEntries(Vec_Wlm(1),ierr)
+                 CALL MatGetDiagonal(Mat_GMinvGt,Vec_Wlm(1),ierr)
+                 CALL VecReciprocal(Vec_Wlm(1),ierr)
+                 CALL MatDiagonalSet(Mat_GMinvGt,Vec_Wlm(1),Insert_Values,ierr)
+                 CALL VecZeroEntries(Vec_Wlm(1),ierr)
                  ! Form 1/dt^2GMinvGt assuming it doesnt change with time
-                 call MatScale(Mat_GMinvGt,f1/dt**2,ierr)
-              end if
+                 CALL MatScale(Mat_GMinvGt,f1/dt**2,ierr)
+              END IF
               ! Apply constraint values using Flm
-              if (gf) then
-                 if (tstep==0) then
-                    call VecZeroEntries(Vec_I,ierr)
-                    if (rank==0) call VecSetValue(Vec_I,igf-1,f1,Insert_Values,&
+              IF (gf) THEN
+                 IF (tstep==0) THEN
+                    CALL VecZeroEntries(Vec_I,ierr)
+                    IF (rank==0) CALL VecSetValue(Vec_I,igf-1,f1,Insert_Values,&
                        ierr) 
-                    call VecAssemblyBegin(Vec_I,ierr)
-                    call VecAssemblyEnd(Vec_I,ierr)
-                 elseif (tstep==5) then
-                    call VecZeroEntries(Vec_I,ierr)  
-                 end if
-              else
-                call VecZeroEntries(Vec_I,ierr)
-                if (rank==0) then
-                   do i=1,nceqs
-                      j1=nint(cval(i,2)/dt); j2=nint(cval(i,3)/dt)
-                      if (tstep>=j1 .and. tstep<=j2) then
+                    CALL VecAssemblyBegin(Vec_I,ierr)
+                    CALL VecAssemblyEnd(Vec_I,ierr)
+                 ELSEIF (tstep==5) THEN
+                    CALL VecZeroEntries(Vec_I,ierr)  
+                 END IF
+              ELSE
+                CALL VecZeroEntries(Vec_I,ierr)
+                IF (rank==0) THEN
+                   DO i=1,nceqs
+                      j1=NINT(cval(i,2)/dt); j2=NINT(cval(i,3)/dt)
+                      IF (tstep>=j1 .AND. tstep<=j2) THEN
                          val=cval(i,1)
                          ! Use a decaying function instead of boxcar ...
                          !if (j2>j1) val=val*(dble(j2-tstep)/dble(j2-j1))**2.5
-                         call VecSetValue(Vec_I,i-1,val,Insert_Values,ierr)
-                      end if
-                   end do
-                end if
-                call VecAssemblyBegin(Vec_I,ierr)
-                call VecAssemblyEnd(Vec_I,ierr)
-              end if
+                         CALL VecSetValue(Vec_I,i-1,val,Insert_Values,ierr)
+                      END IF
+                   END DO
+                END IF
+                CALL VecAssemblyBegin(Vec_I,ierr)
+                CALL VecAssemblyEnd(Vec_I,ierr)
+              END IF
               ! Form lambda=(GUp-Flm)/(dt^2GMinvGt)
-              call MatMult(Mat_G,Vec_Up,Vec_Wlm(1),ierr)
-              call VecWAXPY(Vec_Wlm(2),-f1,Vec_I,Vec_Wlm(1),ierr)
-              call MatMult(Mat_GMinvGt,Vec_Wlm(2),Vec_lambda,ierr)
+              CALL MatMult(Mat_G,Vec_Up,Vec_Wlm(1),ierr)
+              CALL VecWAXPY(Vec_Wlm(2),-f1,Vec_I,Vec_Wlm(1),ierr)
+              CALL MatMult(Mat_GMinvGt,Vec_Wlm(2),Vec_lambda,ierr)
               ! Form Up=Up-dt^2(Minv(Gtlambda))
-              call MatMult(Mat_Gt,Vec_lambda,Vec_W(1),ierr)
-              call MatMult(Mat_Minv,Vec_W(1),Vec_W(2),ierr)
-              call VecAXPY(Vec_Up,-dt**2,Vec_W(2),ierr)
-           end if
-           call VecCopy(Vec_U,Vec_Um,ierr)
-           call VecCopy(Vec_Up,Vec_U,ierr)
-           if (gf) then
-              if (nobs_loc>0) then
-                 call GetVec_obs
+              CALL MatMult(Mat_Gt,Vec_lambda,Vec_W(1),ierr)
+              CALL MatMult(Mat_Minv,Vec_W(1),Vec_W(2),ierr)
+              CALL VecAXPY(Vec_Up,-dt**2,Vec_W(2),ierr)
+           END IF
+           CALL VecCopy(Vec_U,Vec_Um,ierr)
+           CALL VecCopy(Vec_Up,Vec_U,ierr)
+           IF (gf) THEN
+              IF (nobs_loc>0) THEN
+                 CALL GetVec_obs
                  tot_uu_dyn_obs=tot_uu_dyn_obs+uu_obs
                  uu_dyn_obs=uu_obs/dt
-                 if (mod(n_log_dyn,frq_wave)==0) then
-                    dyn=.true.
-                    call WriteOutput_obs;
-                    dyn=.false.
-                 end if
-              end if
-              if (mod(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
+                 IF (MOD(n_log_dyn,frq_wave)==0) THEN
+                    dyn=.TRUE.
+                    CALL WriteOutput_obs;
+                    dyn=.FALSE.
+                 END IF
+              END IF
+              IF (MOD(n_log_dyn,frq_wave)==0) n_log_wave=n_log_wave+1
               n_log_dyn=n_log_dyn+1
               ! Write output
-              call GetVec_U; tot_uu=tot_uu+uu
-              if (mod(tstep,frq)==0) call WriteOutput
-           else
-              call VecZeroEntries(Vec_F,ierr)
-              call FormRHS
-              call VecAssemblyBegin(Vec_F,ierr)
-              call VecAssemblyEnd(Vec_F,ierr)
+              CALL GetVec_U; tot_uu=tot_uu+uu
+              IF (MOD(tstep,frq)==0) CALL WriteOutput
+           ELSE
+              CALL VecZeroEntries(Vec_F,ierr)
+              CALL FormRHS
+              CALL VecAssemblyBegin(Vec_F,ierr)
+              CALL VecAssemblyEnd(Vec_F,ierr)
               ! Write output
-              call GetVec_U; tot_uu=tot_uu+uu
-              if (mod(tstep,frq)==0) call WriteOutput
-              if (nceqs>0) call VecZeroEntries(Vec_I,ierr)
-           end if
-        end do ! Explicit run
-        if (.not. gf) exit 
-        if (rank==0 .and. frc(j)==1 .and. mod(igf,dmn)/=0)                     &
-           call WriteOutput_log_wave
+              CALL GetVec_U; tot_uu=tot_uu+uu
+              IF (MOD(tstep,frq)==0) CALL WriteOutput
+              IF (nceqs>0) CALL VecZeroEntries(Vec_I,ierr)
+           END IF
+        END DO ! Explicit run
+        IF (.NOT. gf) EXIT 
+        IF (rank==0 .AND. frc(j)==1 .AND. MOD(igf,dmn)/=0)                     &
+           CALL WriteOutput_log_wave
         ! Reset solutions
-        call VecZeroEntries(Vec_U,ierr) 
-        call VecZeroEntries(Vec_Um,ierr)
-        call VecZeroEntries(Vec_Up,ierr)
-        if (nobs_loc>0) tot_uu_dyn_obs=f0
-     end do ! Unit rupture loop
-     call PrintMsg("Done")
-     if (nceqs>0) then
-        call MatDestroy(Mat_Gt,ierr)
-        call MatDestroy(Mat_G,ierr)
-        call MatDestroy(Mat_GMinvGt,ierr)
-        call VecDestroy(Vec_lambda,ierr)
-        call VecDestroy(Vec_I,ierr)
-        call VecDestroyVecsF90(2,Vec_Wlm,ierr)
-     end if
-     call MatDestroy(Mat_M,ierr)
-     call MatDestroy(Mat_Minv,ierr)
-     call VecDestroy(Vec_Um,ierr)
-     call VecDestroy(Vec_Up,ierr)
-     call VecDestroyVecsF90(6,Vec_W,ierr)
+        CALL VecZeroEntries(Vec_U,ierr) 
+        CALL VecZeroEntries(Vec_Um,ierr)
+        CALL VecZeroEntries(Vec_Up,ierr)
+        IF (nobs_loc>0) tot_uu_dyn_obs=f0
+     END DO ! Unit rupture loop
+     CALL PrintMsg("Done")
+     IF (nceqs>0) THEN
+        CALL MatDestroy(Mat_Gt,ierr)
+        CALL MatDestroy(Mat_G,ierr)
+        CALL MatDestroy(Mat_GMinvGt,ierr)
+        CALL VecDestroy(Vec_lambda,ierr)
+        CALL VecDestroy(Vec_I,ierr)
+        CALL VecDestroyVecsF90(2,Vec_Wlm,ierr)
+     END IF
+     CALL MatDestroy(Mat_M,ierr)
+     CALL MatDestroy(Mat_Minv,ierr)
+     CALL VecDestroy(Vec_Um,ierr)
+     CALL VecDestroy(Vec_Up,ierr)
+     CALL VecDestroyVecsF90(6,Vec_W,ierr)
   END IF ! Explicit solver
   !---------------------------------------------------------------------------80
 
   ! Cleanup
-  call PrintMsg("Cleaning up ...")
-  call VecScatterDestroy(Scatter,ierr)
-  call ISDestroy(To,ierr)
-  call ISDestroy(From,ierr)
-  call VecDestroy(Seq_U,ierr)
-  call VecDestroy(Vec_F,ierr)
-  call VecDestroy(Vec_U,ierr)
-  call MatDestroy(Mat_K,ierr)
-  if (visco) deallocate(stress)
-  deallocate(coords,nodes,bc,mat,id,k,m,f,indx,ipoint,weight,enodes,ecoords,   &
+  CALL PrintMsg("Cleaning up ...")
+  CALL VecScatterDestroy(Scatter,ierr)
+  CALL ISDestroy(To,ierr)
+  CALL ISDestroy(From,ierr)
+  CALL VecDestroy(Seq_U,ierr)
+  CALL VecDestroy(Vec_F,ierr)
+  CALL VecDestroy(Vec_U,ierr)
+  CALL MatDestroy(Mat_K,ierr)
+  IF (visco) DEALLOCATE(stress)
+  DEALLOCATE(coords,nodes,bc,mat,id,k,m,f,indx,ipoint,weight,enodes,ecoords,   &
      vvec,indxmap,tot_uu,uu,cval,fnode,fval,telsd,tval,nl2g)
   ! Delete cnstr.tmp 
-  if (rank==0 .and. nceqs>0) then
-    open(15, file="cnstrns.tmp",status='old')
-    close(15, status='delete')
-  end if
-  call PrintMsg("Finished")
+  IF (rank==0 .AND. nceqs>0) THEN
+    OPEN(15, file="cnstrns.tmp",status='old')
+    CLOSE(15, status='delete')
+  END IF
+  CALL PrintMsg("Finished")
 
 9 CALL PetscFinalize(ierr)
   !---------------------------------------------------------------------------80
@@ -1703,122 +1733,122 @@ program main
 CONTAINS
   
   ! Read simulation parameters
-  subroutine ReadParameters
-    implicit none
-    read(10,*)stype,eltype,nodal_bw
-    fault=.false.
-    if (stype=="fault" .or. stype=="fault-p" .or. stype=="fault-pv" .or.       &
-       stype=="fault-v") fault=.true.
-    gf=.false.
-    if (stype=="explicit-gf") then
-       stype="explicit"; gf=.true.
-    end if
-    if (fault .or. gf) then
-       read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf
-    else
-       read(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs
-    end if
-    read(10,*)t,dt,frq,dsp
+  SUBROUTINE ReadParameters
+    IMPLICIT NONE
+    READ(10,*)stype,eltype,nodal_bw
+    fault=.FALSE.
+    IF (stype=="fault" .OR. stype=="fault-p" .OR. stype=="fault-pv" .OR.       &
+       stype=="fault-v") fault=.TRUE.
+    gf=.FALSE.
+    IF (stype=="explicit-gf") THEN
+       stype="explicit"; gf=.TRUE.
+    END IF
+    IF (fault .OR. gf) THEN
+       READ(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nfnd,nobs,nceqs_ncf
+    ELSE
+       READ(10,*)nels,nnds,nmts,nceqs,nfrcs,ntrcs,nabcs,nobs
+    END IF
+    READ(10,*)t,dt,frq,dsp
     ! Dynamic run time before jumping back to static model
-    if (fault) then 
-       read(10,*)t_dyn,dt_dyn,frq_dyn,t_lim,dsp_hyb,lm_str,bod_frc,            &
+    IF (fault) THEN 
+       READ(10,*)t_dyn,dt_dyn,frq_dyn,t_lim,dsp_hyb,lm_str,bod_frc,            &
        hyb,rsf,init
-       if (init==1) then
-          fdt=dt/dble(3600*24)
-          dt=dble(3600*24)
-       end if
-    end if
-    if (hyb==1 .and. rsf==0) read(10,*)frq_wave,frq_slip 
-    if (hyb==1 .and. rsf==1) read(10,*)frq_wave,frq_slip,v_bg
-    poro=.false.; visco=.false.
-    if (stype=="implicit-p" .or. stype=="implicit-pv") poro=.true.
-    if (stype=="implicit-v" .or. stype=="implicit-pv") visco=.true.
-    if (dt==f0) dt=f1
-    if (stype=="explicit") read(10,*)alpha,beta
-    if (stype=="fault-p" .or. stype=="fault-pv") poro=.true.
-    if (stype=="fault-v" .or. stype=="fault-pv") visco=.true.
-    if (fault) read(10,*)alpha,beta
-  end subroutine ReadParameters
+       IF (init==1) THEN
+          fdt=dt/DBLE(3600*24)
+          dt=DBLE(3600*24)
+       END IF
+    END IF
+    IF (hyb==1 .AND. rsf==0) READ(10,*)frq_wave,frq_slip 
+    IF (hyb==1 .AND. rsf==1) READ(10,*)frq_wave,frq_slip,v_bg
+    poro=.FALSE.; visco=.FALSE.
+    IF (stype=="implicit-p" .OR. stype=="implicit-pv") poro=.TRUE.
+    IF (stype=="implicit-v" .OR. stype=="implicit-pv") visco=.TRUE.
+    IF (dt==f0) dt=f1
+    IF (stype=="explicit") READ(10,*)alpha,beta
+    IF (stype=="fault-p" .OR. stype=="fault-pv") poro=.TRUE.
+    IF (stype=="fault-v" .OR. stype=="fault-pv") visco=.TRUE.
+    IF (fault) READ(10,*)alpha,beta
+  END SUBROUTINE ReadParameters
 
   ! Setup implicit solver
-  subroutine SetupKSPSolver
-    implicit none
-    call KSPSetType(Krylov,"gmres",ierr)
-    call KSPGetPC(Krylov,PreCon,ierr)
-    call PCSetType(PreCon,"asm",ierr)
+  SUBROUTINE SetupKSPSolver
+    IMPLICIT NONE
+    CALL KSPSetType(Krylov,"gmres",ierr)
+    CALL KSPGetPC(Krylov,PreCon,ierr)
+    CALL PCSetType(PreCon,"asm",ierr)
 #if (PETSC_VERSION_MAJOR==3 && PETSC_VERSION_MINOR<=4)
-    call KSPSetTolerances(Krylov,1.0D-9,Petsc_Default_Double_Precision,        &
+    CALL KSPSetTolerances(Krylov,1.0D-9,Petsc_Default_Double_Precision,        &
        Petsc_Default_Double_Precision,Petsc_Default_Integer,ierr)
 #else
-    call KSPSetTolerances(Krylov,1.0D-9,Petsc_Default_Real,Petsc_Default_Real, &
+    CALL KSPSetTolerances(Krylov,1.0D-9,Petsc_Default_Real,Petsc_Default_Real, &
        Petsc_Default_Integer,ierr)
 #endif
-    call KSPSetFromOptions(Krylov,ierr)
-  end subroutine SetupKSPSolver
+    CALL KSPSetFromOptions(Krylov,ierr)
+  END SUBROUTINE SetupKSPSolver
 
   ! Scatter U and get all local values
-  subroutine GetVec_U
-    implicit none
-    if (dyn) then
-       call GetVec(Scatter_dyn,Vec_U_dyn,Seq_U_dyn,uu_dyn)
-    else
-       call GetVec(Scatter,Vec_U,Seq_U,uu)
-    end if
-  end subroutine GetVec_U
+  SUBROUTINE GetVec_U
+    IMPLICIT NONE
+    IF (dyn) THEN
+       CALL GetVec(Scatter_dyn,Vec_U_dyn,Seq_U_dyn,uu_dyn)
+    ELSE
+       CALL GetVec(Scatter,Vec_U,Seq_U,uu)
+    END IF
+  END SUBROUTINE GetVec_U
 
-  subroutine GetVec_S
-    implicit none
-    call GetVec(Scatter_u,Vec_SS,Seq_SS,ss)
-    call GetVec(Scatter_u,Vec_SH,Seq_SH,sh)
-  end subroutine GetVec_S
+  SUBROUTINE GetVec_S
+    IMPLICIT NONE
+    CALL GetVec(Scatter_u,Vec_SS,Seq_SS,ss)
+    CALL GetVec(Scatter_u,Vec_SH,Seq_SH,sh)
+  END SUBROUTINE GetVec_S
 
-  subroutine GetVec_dip_nrm
-    implicit none
-    call GetVec(Scatter_u,Vec_dip,Seq_dip,dip)
-    call GetVec(Scatter_u,Vec_nrm,Seq_nrm,nrm)
-  end subroutine GetVec_dip_nrm
+  SUBROUTINE GetVec_dip_nrm
+    IMPLICIT NONE
+    CALL GetVec(Scatter_u,Vec_dip,Seq_dip,dip)
+    CALL GetVec(Scatter_u,Vec_nrm,Seq_nrm,nrm)
+  END SUBROUTINE GetVec_dip_nrm
 
-  subroutine GetVec_f2s_seq
-    implicit none
-    call GetVec(Scatter_u,Vec_f2s,Seq_f2s,f2s)
-  end subroutine GetVec_f2s_seq
+  SUBROUTINE GetVec_f2s_seq
+    IMPLICIT NONE
+    CALL GetVec(Scatter_u,Vec_f2s,Seq_f2s,f2s)
+  END SUBROUTINE GetVec_f2s_seq
 
-  subroutine GetVec_fp
-    implicit none
-    call GetVec(Scatter_u,Vec_fp,Seq_fp,fp)
-  end subroutine GetVec_fp
+  SUBROUTINE GetVec_fp
+    IMPLICIT NONE
+    CALL GetVec(Scatter_u,Vec_fp,Seq_fp,fp)
+  END SUBROUTINE GetVec_fp
 
-  subroutine GetVec_fl
-    implicit none
-    call GetVec(Scatter_u,Vec_fl,Seq_fl,fl)
-  end subroutine GetVec_fl
+  SUBROUTINE GetVec_fl
+    IMPLICIT NONE
+    CALL GetVec(Scatter_u,Vec_fl,Seq_fl,fl)
+  END SUBROUTINE GetVec_fl
 
-  subroutine GetVec_flc
-    implicit none
-    call GetVec(Scatter_u,Vec_flc,Seq_flc,flc)
-  end subroutine GetVec_flc
+  SUBROUTINE GetVec_flc
+    IMPLICIT NONE
+    CALL GetVec(Scatter_u,Vec_flc,Seq_flc,flc)
+  END SUBROUTINE GetVec_flc
 
-  subroutine GetVec_qu
-    implicit none
-    call GetVec(Scatter_q,Vec_qu,Seq_qu,qu)
-  end subroutine GetVec_qu
+  SUBROUTINE GetVec_qu
+    IMPLICIT NONE
+    CALL GetVec(Scatter_q,Vec_qu,Seq_qu,qu)
+  END SUBROUTINE GetVec_qu
 
-  subroutine GetVec_ql
-    implicit none
-    call GetVec(Scatter_q,Vec_ql,Seq_ql,ql)
-  end subroutine GetVec_ql
+  SUBROUTINE GetVec_ql
+    IMPLICIT NONE
+    CALL GetVec(Scatter_q,Vec_ql,Seq_ql,ql)
+  END SUBROUTINE GetVec_ql
 
-  subroutine GetVec(Scatter,Vec_X,Vec_Y,array)
-    implicit none
+  SUBROUTINE GetVec(Scatter,Vec_X,Vec_Y,array)
+    IMPLICIT NONE
     Vec :: Vec_X, Vec_Y
     VecScatter :: Scatter
-    real(8) :: array(:)
-    real(8),pointer :: pntr(:)
-    call VecScatterBegin(Scatter,Vec_X,Vec_Y,Insert_Values,Scatter_Forward,ierr)
-    call VecScatterEnd(Scatter,Vec_X,Vec_Y,Insert_Values,Scatter_Forward,ierr)
-    call VecGetArrayF90(Vec_Y,pntr,ierr)
+    REAL(8) :: array(:)
+    REAL(8),POINTER :: pntr(:)
+    CALL VecScatterBegin(Scatter,Vec_X,Vec_Y,Insert_Values,Scatter_Forward,ierr)
+    CALL VecScatterEnd(Scatter,Vec_X,Vec_Y,Insert_Values,Scatter_Forward,ierr)
+    CALL VecGetArrayF90(Vec_Y,pntr,ierr)
     array=pntr
-    call VecRestoreArrayF90(Vec_Y,pntr,ierr)
-  end subroutine GetVec
+    CALL VecRestoreArrayF90(Vec_Y,pntr,ierr)
+  END SUBROUTINE GetVec
 
-end program main
+END PROGRAM main
