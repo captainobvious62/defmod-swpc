@@ -213,7 +213,7 @@ PROGRAM main
   END DO
   n=SUM(npart)
   ! Flag to enable Specified Dirichlet Pressure (to be moved to input file)
-  DPFlag = 1 
+  DPFlag = 0 
   !ALLOCATE(coords(n,dmn),bc(n,dmn+p))
   ! BC row now includes specified pore pressure (hence the + 1)/rx_press 
   ! variable
@@ -832,6 +832,7 @@ PROGRAM main
         END DO
      END IF
      IF (t>f0 .AND. dt>f0 .AND. t>=dt) THEN
+        ! Create Index Set Scheme for displacement and pressure from Vec_U
         CALL VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
         CALL VecCopy(Vec_U,Vec_Um,ierr)
         CALL VecGetLocalSize(Vec_U,j,ierr)
@@ -883,6 +884,7 @@ PROGRAM main
               CALL ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
                  RIl,ierr)
            END IF
+           ! Generate Compressibility Submatrix
            CALL MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
            CALL MatZeroEntries(Mat_Kc,ierr)
            ALLOCATE(kc(eldofp,eldofp),indxp(eldofp),Hs(eldofp))
@@ -1000,7 +1002,8 @@ PROGRAM main
            END IF
            ! Write output
            IF (vout==1) CALL WriteOutput_x
-           IF (nobs_loc>0) CALL WriteOutput_obs 
+           IF (nobs_loc>0) CALL WriteOutput_obs
+           ! Case of initial pressure specification
            IF (init==1) THEN
               CALL PrintMsg("Pore fluid initialization...")
               CALL VecGetSubVector(Vec_Um,RI,Vec_Up0,ierr)
@@ -1011,6 +1014,7 @@ PROGRAM main
               tot_uu=f0
               CALL VecZeroEntries(Vec_F,ierr)
               CALL ApplySource
+              CALL ApplyGravity
               CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
               CALL GetVec_U; tot_uu=tot_uu+uu
               CALL VecAXPY(Vec_Um,f1,Vec_U,ierr)
