@@ -31,8 +31,20 @@ PROGRAM main
   Vec :: LVec_rhob
   
   ! Viewer Related
-  PetscViewer :: H5Viewer,ASCIIViewer
-  
+  PetscViewer :: ASCIICoordViewer,ASCIIMeshViewer,ASCIIFSLabelViewer,           &
+       ASCIIVSLabelViewer,ASCIICSLabelViewer,ASCIIISViewer
+
+  ! Mesh interval
+  !PetscInt :: pStart,pEnd
+
+  ! Mesh Sets
+  DMLabel :: FSLabel,VSLabel,CSLabel
+
+  ! Index Sets
+  IS :: IS_LabelIDs,IS_FaceSets,IS_VertexSets,IS_CellSets
+
+  ! Nodesets, sidesets, etc.
+  PetscInt :: num_ns,num_ss,num_bl,labelsize
 !-----------------------------------------------------------------------------80  
   CALL PetscInitialize(Petsc_Null_Character,ierr)
   CALL MPI_Comm_Rank(MPI_Comm_World,rank,ierr)
@@ -98,7 +110,7 @@ PROGRAM main
   !---------------------------------------------------------------------------80
   IF (em) THEN
     interpolate=.TRUE.  
-    CALL DMPlexCreateFromFile(Petsc_Comm_World, exofile, Petsc_False, dm, ierr)
+    CALL DMPlexCreateExodusFromFile(Petsc_Comm_World, exofile, Petsc_True, dm, ierr)
     !CALL DMViewFromOptions(dm, PETSC_NULL_OBJECT, "-orig_dm_view");CHKERRQ(ierr)
 
     ! Read in mesh particulars, generate reference vectors
@@ -115,16 +127,47 @@ PROGRAM main
     CALL PrintMsg('Trying to read from Array')
     CALL VecGetArrayReadF90(Vec_Coordinates,PETSc_pntr,ierr)
     PETSc_coords_array=PETSc_pntr
+    ! Reshape to (nnds,dmn)
     PETSc_coords=RESHAPE(PETSc_pntr,(/dmn,coord_len/))
     CALL PrintMsg('Restoring Data')
     CALL VecRestoreArrayReadF90(Vec_Coordinates,PETSc_pntr,ierr)
-    !Reshape to (nnds,dmn)
     ! Write to test output file
  ! Requires PETSc Reference Section
-    CALL DMCreateGlobalVector(dm,GVec_rhob,ierr)    
-    CALL PetscViewerASCIIOpen(MPI_Comm_World,'coord.out',ASCIIViewer,ierr)
-   ! CALL VecView(Vec_Coordinates,ASCIIViewer,ierr)
-    CALL DMView(dm, ASCIIViewer, ierr)
+    ! CALL DMCreateGlobalVector(dm,GVec_rhob,ierr)
+
+    ! Read in nodesets, sidesets, and such (i hope) from mesh
+    CALL DMGetLabel(dm,'Face Sets',FSLabel,ierr)
+    CALL DMGetLabel(dm,'Vertex Sets',VSLabel,ierr)
+    CALL DMGetLabel(dm,'Cell Sets',CSLabel,ierr)
+
+    ! Again with the DMLabels, this time to index sets
+    CALL DMGetLabelIdIS(dm,'Cell Sets',IS_LabelIDs,ierr)
+
+    ! Next step is to read in node set and side set values directly. This
+    ! will take more work/drawing out on paper.
+    ! Read in sidesets
+    CALL DMGetLabelSize(dm,'Face Sets',labelsize,ierr)
+
+    
+    ! Debug PETSc output
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'coordPETSc.out',ASCIICoordViewer,ierr)
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'mesh.out',ASCIIMeshViewer,ierr)
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'FSlabel.out',ASCIIFSLabelViewer,ierr)    
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'VSlabel.out',ASCIIVSLabelViewer,ierr)
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'CSlabel.out',ASCIICSLabelViewer,ierr)
+    CALL PetscViewerASCIIOpen(MPI_Comm_World,'ISlabel.out',ASCIIISViewer,ierr)        
+    CALL VecView(Vec_Coordinates,ASCIICoordViewer,ierr)
+    CALL DMView(dm, ASCIIMeshViewer, ierr)
+    CALL DMLabelView(FSLabel, ASCIIFSLabelViewer,ierr)
+    CALL DMLabelView(VSLabel, ASCIIVSLabelViewer,ierr)
+    CALL DMLabelView(CSLabel, ASCIICSLabelViewer,ierr)
+    CALL ISView(IS_LabelIDs, ASCIIISViewer, ierr)
+    OPEN(14,file='coordFORTRAN.out',status='replace')
+    DO i=1,coord_len
+       WRITE(14,*)PETSc_coords(:,i)
+    END DO
+    CLOSE(14)
+    
     !CALL PetscIntView(1,Int_elem,PETSC_VIEWER_STDOUT_WORLD,ierr)
   END IF
 !-----------------------------------------------------------------------------80
@@ -269,6 +312,10 @@ PROGRAM main
      READ(10,*)mat(i,:)
   END DO
   DEALLOCATE(epart,npart)
+  !---------------------------------------------------------------------------80
+
+  ! Build Initial Formulation
+  !===========================================================================80
 
   ! Initialize local element variables and global U
   ALLOCATE(ipoint(nip,dmn),weight(nip),k(ef_eldof,ef_eldof),m(eldof,eldof),    &
@@ -832,58 +879,13 @@ PROGRAM main
         END DO
      END IF
      IF (t>f0 .AND. dt>f0 .AND. t>=dt) THEN
-        ! Create Index Set Scheme for displacement and pressure from Vec_U
+
         CALL VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
         CALL VecCopy(Vec_U,Vec_Um,ierr)
-        CALL VecGetLocalSize(Vec_U,j,ierr)
         IF (poro) THEN
-           j2=0; j3=0; j4=0; j5=0; j6=0
-           DO i=1,j
-              IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-                 j2=j2+1
-              END IF
-              IF (nceqs>0) THEN
-                 IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
-                    j3=j3+1
-                 END IF
-              END IF
-              IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-                 j4=j4+1
-              END IF
-              IF (j1+i-1<(dmn+1)*nnds) THEN
-                 j5=j5+1
-              END IF
-           END DO
-           ALLOCATE(work(j2),workl(j3),worku(j4))
-           j2=0; j3=0; j4=0; j5=0
-           DO i=1,j
-              IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-                 j2=j2+1
-                 work(j2)=j1+i-1
-              END IF
-              IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-                 j4=j4+1
-                 worku(j4)=j1+i-1
-              END IF
-              IF (nceqs>0) THEN
-                 IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
-                    j3=j3+1
-                    workl(j3)=j1+i-1
-                 END IF
-              END IF
-           END DO
-           j=SIZE(work)
-           CALL ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,  &
-              ierr)
-           j=SIZE(worku)
-           CALL ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
-              RIu,ierr)
-           CALL MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
-           IF (nceqs > 0) THEN
-              j=SIZE(workl)
-              CALL ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
-                 RIl,ierr)
-           END IF
+           ! Create Index Set Scheme for displacement, pressure, and LM locations from Vec_U
+           CALL GenerateUPIndicies(Vec_U,nceqs,nnds,dmn,nceqs_ncf,RI,RIu,RIl)
+           
            ! Generate Compressibility Submatrix
            CALL MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
            CALL MatZeroEntries(Mat_Kc,ierr)
@@ -898,14 +900,20 @@ PROGRAM main
            END DO
            CALL MatAssemblyBegin(Mat_Kc,Mat_Final_Assembly,ierr)
            CALL MatAssemblyEnd(Mat_Kc,Mat_Final_Assembly,ierr)
+
+           ! Create Initial Pressure Vector
            CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
            IF (init==1) CALL VecDuplicate(Vec_Up,Vec_Up0,ierr) ! Initial p
            CALL VecDuplicate(Vec_Up,Vec_I,ierr) ! I->KcUp
            CALL VecCopy(Vec_Up,Vec_I,ierr) ! Hold Up
+           
+           ! Create deformation induced fluid source vector
            CALL VecDuplicate(Vec_Up,Vec_qu,ierr) ! qu->Htu
+           ! Create constraint induced fluid source vector
            CALL VecDuplicate(Vec_Up,Vec_ql,ierr)
            CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
            ALLOCATE(uup(SIZE(work)))
+
            ! Initialize space for lambda, p related nodal force
            CALL VecGetSubVector(Vec_Um,RIu,Vec_Uu,ierr)
            CALL VecDuplicate(Vec_Uu,Vec_fp,ierr) ! fp->Hp

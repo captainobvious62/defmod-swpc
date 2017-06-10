@@ -1780,6 +1780,68 @@ CONTAINS
     IF (rank==0) PRINT*,msg
   END SUBROUTINE PrintMsg
 
+  ! Generate Pressure and Displacement Index Sets
+  SUBROUTINE GenerateUPIndicies(Vec_U,nceqs,nnds,dmn,nceqs_ncf,RI,RIu,RIl)
+    IMPLICIT NONE
+#include "petsc.h"
+    Vec :: Vec_U
+    IS :: RI,RIu,RIl
+    INTEGER :: nceqs,nnds,dmn,nceqs_ncf,j,j1,j2,j3,j4,j5,j6,i
+    INTEGER,ALLOCATABLE :: work(:),worku(:),workl(:)
+
+    CALL VecGetLocalSize(Vec_U,j,ierr)
+    j2=0; j3=0; j4=0; j5=0; j6=0
+    DO i=1,j
+       IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
+          j2=j2+1
+       END IF
+       IF (nceqs>0) THEN
+          IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
+             j3=j3+1
+          END IF
+       END IF
+       IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
+          j4=j4+1
+       END IF
+       IF (j1+i-1<(dmn+1)*nnds) THEN
+          j5=j5+1
+       END IF
+    END DO
+    ALLOCATE(work(j2),workl(j3),worku(j4))
+    j2=0; j3=0; j4=0; j5=0
+    DO i=1,j
+       IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
+          j2=j2+1
+          work(j2)=j1+i-1
+       END IF
+       IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
+          j4=j4+1
+          worku(j4)=j1+i-1
+       END IF
+       IF (nceqs>0) THEN
+          IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
+             j3=j3+1
+             workl(j3)=j1+i-1
+          END IF
+       END IF
+    END DO
+    j=SIZE(work)
+    CALL ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,  &
+         ierr)
+    j=SIZE(worku)
+    CALL ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
+         RIu,ierr)
+    CALL MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
+    IF (nceqs > 0) THEN
+       j=SIZE(workl)
+       CALL ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
+            RIl,ierr)
+    END IF
+  END SUBROUTINE GenerateUPIndicies
+
+
+
+  
   ! Write results in ASCII VTK (legacy) format
   SUBROUTINE WriteOutput
     IMPLICIT NONE
@@ -2052,7 +2114,7 @@ CONTAINS
   END SUBROUTINE WriteOutput_x
 
   ! Write out deformation and (absolute) Coulomb force due 
-  !to pore pressure initialization
+  ! to pore pressure initialization
   SUBROUTINE WriteOutput_init
     IMPLICIT NONE
     CHARACTER(64) :: fmt
