@@ -105,7 +105,7 @@ subroutine RscElKv(ecoords,estress,E,nu,visc,expn,dt,k,dtmp)
           kl=>k(eldof+1:,eldof+1:)
           
           ! Fluid Stiffness (Permeability) Matrix, K_c 
-          ! K_c = dN^T * k/mu * dN          
+          ! K_c = dNp^T * k/mu * dNp          
           kl=kl+matmul(transpose(dN),matmul(Q,dN))*weight(i)*detj*theta*dt*s*s
 
           ! Pore Pressure Stabilization Matrix, H_s

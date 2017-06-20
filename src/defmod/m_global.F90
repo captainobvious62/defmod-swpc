@@ -12,17 +12,19 @@ MODULE global
   INTEGER :: nnds,nels,nmts,nceqs,nfrcs,ntrcs,nabcs,p,frq,dsp,dsp_hyb,lm_str,  &
      bod_frc,steps,tstep,steps_dyn,tstep_dyn,nfnd,hyb,frq_dyn,nobs,n_log,      &
      n_log_dyn,n_log_wave,ih,igf,rsf,n_log_slip,nceqs_ncf,init,frq_wave,       &
-     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,DPFlag
+     frq_slip,n_lmnd,lmnd0,nobs_loc,nfnd_loc,ngp,ngp_loc,DPFlag,nrxs
   REAL(8) :: alpha,beta,t,dt,t_dyn,dt_dyn,t_lim,val,wt,scale,rslip,t_sta,t_abs,&
      t_hyb,v_bg,vtol,trunc
   INTEGER,ALLOCATABLE :: nodes(:,:),bc(:,:),id(:),work(:),fnode(:),telsd(:,:), &
      worku(:),workl(:),node_pos(:),node_neg(:),node_all(:),slip(:),perm(:),    &
-     onlst(:,:),frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),gpnlst(:,:),nnd_fe2fd(:),rsf_sta(:)
+     onlst(:,:),frc(:),slip_sum(:),slip0(:),idgp(:,:),idgp_loc(:,:),           &
+     gpnlst(:,:),nnd_fe2fd(:),rsf_sta(:),rxnode(:)
   REAL(8),ALLOCATABLE :: coords(:,:),mat(:,:),stress(:,:,:),vvec(:),cval(:,:), &
      fval(:,:),tval(:,:),vvec_all(:,:),vecf(:,:),fc(:),matf(:,:),st_init(:,:), &
      xfnd(:,:),ocoord(:,:),oshape(:,:),fcd(:),dc(:),rsfb0(:),rsfV0(:),         &
      rsfdtau0(:),rsfa(:),rsfb(:),rsfL(:),rsftheta(:),coh(:),dcoh(:),mu_hyb(:), &
-     mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),rx_press(:)
+     mu_cap(:),rsfv(:),ocoord_loc(:,:),xgp(:,:),gpshape(:,:),rx_press(:),      &
+     row_replace(:,:),rxval(:,:)
   REAL(8),ALLOCATABLE,TARGET :: uu(:),tot_uu(:),uup(:),uu_dyn(:),tot_uu_dyn(:),&
      fl(:),ql(:),flc(:),fp(:),qu(:),ss(:),sh(:),f2s(:),dip(:),nrm(:),          &
      flt_slip(:),tot_flt_slip(:),qs_flt_slip(:)
@@ -1183,7 +1185,60 @@ CONTAINS
           IF (el/=0) CALL ApplyTraction(el,side,vvec)
        END IF
     END DO
+    
   END SUBROUTINE FormRHS
+
+    ! Form RHS
+  SUBROUTINE FormRHS_Debug
+    IMPLICIT NONE
+#include "petsc.h"
+    INTEGER :: i,j,rowid,n
+    REAL(8) :: t1,t2
+    ! Account for LM constraints
+    DO i=1,nceqs
+       t1=cval(i,2)/dt; t2=cval(i,3)/dt
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
+          j=(dmn+p)*nnds+i-1
+          IF (stype/="explicit" .AND. rank==0) THEN
+             val=wt*cval(i,1)
+             CALL VecSetValue(Vec_F,j,val,Add_Values,ierr)
+          END IF
+       END IF
+    END DO
+    ! Account for nodal force / fluid source values
+    DO i=1,nfrcs
+       t1=fval(i,dmn+p+1)/dt; t2=fval(i,dmn+p+2)/dt
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
+          node=fnode(i); vvec=fval(i,1:dmn+p)
+          IF (rank==0) CALL ApplyNodalForce(node,vvec)
+       END IF
+    END DO
+    ! Account for traction BCs
+    DO i=1,ntrcs
+       t1=tval(i,dmn+p+1)/dt; t2=tval(i,dmn+p+2)/dt
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
+          el=telsd(i,1); side=telsd(i,2); vvec=tval(i,1:dmn+p)
+          IF (el/=0) CALL ApplyTraction(el,side,vvec)
+       END IF
+    END DO
+    ! Account for prescribed/dirichlet values
+    ! In practice only to be used for pressure
+    ALLOCATE(row_replace(1,n))
+    DO i=1,nrxs
+       t1=rxval(i,dmn+p+1)/dt; t2=rxval(i,dmn+p+2)/dt
+       IF (tstep>=NINT(t1) .AND. tstep<=NINT(t2)) THEN
+          node=rxnode(i); vvec=rxval(i,1:dmn+p)
+          IF (rank==0) THEN
+             row_replace=f0
+             rowid=(dmn+p)*node-(dmn+p)+(dmn+p)-1
+             CALL MatZeroRows(Mat_K,1,rowid-1,0.0,ierr)
+             CALL MatSetValue(Mat_K,rowid-1,rowid-1,f1,INSERT_VALUE,ierr)
+             CALL ApplyNodalForce(node,vvec)
+          END IF
+       END IF
+    END DO
+
+  END SUBROUTINE FormRHS_Debug
 
   ! Form local damping matrix for elements with viscous dampers
   SUBROUTINE FormLocalAbsC(el,side,dir,m,indx)
@@ -1633,34 +1688,44 @@ CONTAINS
     CALL VecAssemblyEnd(Vec_F,ierr)
   END SUBROUTINE ApplyGravity
 
-  ! Apply fluid body source
+
+!!$  ! Apply fluid body source
   SUBROUTINE ApplySource
-    IMPLICIT NONE
+    implicit none
 #include "petsc.h"
-    REAL(8) :: sdns,sip,ssca,svec((dmn+1)*npel),ecoords(npel,dmn),detj
+    REAL(8) :: sdns,sip(npel,1),ssca,svec((dmn+1)*npel),ecoords(npel,dmn),detj,H,s
+    REAL(8) :: dN(dmn,npel),gvec(dmn,1),Q(dmn,dmn)
     INTEGER :: el,i,j,indx((dmn+1)*npel),row((dmn+1)*npel)
-    DO el=1,nels
+    s=scale
+    do el=1,nels
        enodes=nodes(el,:)
        ecoords=coords(enodes,:)
-       CALL FormElIndxp(enodes,indx)
+       call FormElIndxp(enodes,indx)
        row=indx(1:(dmn+1)*npel)
        row=indxmap(row,2)
+       H=mat(id(el),6)
+       ! Mobility Tensor
+       do i=1,dmn
+        Q(i,i) = H
+       end do        
        sdns=mat(id(el),10)
        ssca=sdns/DBLE(npel)
-       sip=f0; svec=f0
-       DO i=1,nip
-          CALL FormdetJ(ipoint(i,:),ecoords,detj)
-          sip=sip+ssca*weight(i)*detj
-       END DO
-       DO i=1,npel
+       sip=f0; svec=f0; gvec=f0
+       gvec(dmn,1) = gravity
+       do i=1,nip
+          call FormdNdetJ(ipoint(i,:),ecoords,dN,detj)
+          sip=sip+matmul(transpose(dN),matmul(Q,gvec))*sdns*weight(i)*detj*s
+          !         sip=sip+ssca*weight(i)*detj
+       end do
+       do i=1,npel
           j=i*(dmn+1)
-          IF (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip
-       END DO
-       CALL VecSetValues(Vec_F,(dmn+1)*npel,row,svec,Add_Values,ierr)
-    END DO
-    CALL VecAssemblyBegin(Vec_F,ierr)
-    CALL VecAssemblyEnd(Vec_F,ierr)
-  END SUBROUTINE ApplySource
+          IF (bc(nodes(el,i),dmn+1)/=0) svec(j)=sip(i,1)
+       end do
+       call VecSetValues(Vec_F,(dmn+1)*npel,row,svec,Add_Values,ierr)
+    end do
+    call VecAssemblyBegin(Vec_F,ierr)
+    call VecAssemblyEnd(Vec_F,ierr)
+  end subroutine ApplySource
 
   ! Reform RHS
   SUBROUTINE ReformLocalRHS(el,f,indx)
@@ -1760,7 +1825,7 @@ CONTAINS
        END DO
        IF (poro) THEN
           IF (bc(nodes(el,j),dmn+1)==0) THEN
-             rxp = rx_press(nodes(el,j))
+             rxp = rx_press(nodes(el,j))*scale
              j2=dmn*npel+j
              f(:) = f(:) - k(:,j2)*rxp
              f(j2) = rxp
@@ -1780,68 +1845,6 @@ CONTAINS
     IF (rank==0) PRINT*,msg
   END SUBROUTINE PrintMsg
 
-  ! Generate Pressure and Displacement Index Sets
-  SUBROUTINE GenerateUPIndicies(Vec_U,nceqs,nnds,dmn,nceqs_ncf,RI,RIu,RIl)
-    IMPLICIT NONE
-#include "petsc.h"
-    Vec :: Vec_U
-    IS :: RI,RIu,RIl
-    INTEGER :: nceqs,nnds,dmn,nceqs_ncf,j,j1,j2,j3,j4,j5,j6,i
-    INTEGER,ALLOCATABLE :: work(:),worku(:),workl(:)
-
-    CALL VecGetLocalSize(Vec_U,j,ierr)
-    j2=0; j3=0; j4=0; j5=0; j6=0
-    DO i=1,j
-       IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-          j2=j2+1
-       END IF
-       IF (nceqs>0) THEN
-          IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
-             j3=j3+1
-          END IF
-       END IF
-       IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-          j4=j4+1
-       END IF
-       IF (j1+i-1<(dmn+1)*nnds) THEN
-          j5=j5+1
-       END IF
-    END DO
-    ALLOCATE(work(j2),workl(j3),worku(j4))
-    j2=0; j3=0; j4=0; j5=0
-    DO i=1,j
-       IF (MOD(j1+i,dmn+1)==0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-          j2=j2+1
-          work(j2)=j1+i-1
-       END IF
-       IF (MOD(j1+i,dmn+1)>0 .AND. j1+i-1<(dmn+1)*nnds) THEN
-          j4=j4+1
-          worku(j4)=j1+i-1
-       END IF
-       IF (nceqs>0) THEN
-          IF (j1+i-1>=(dmn+1)*nnds+nceqs_ncf) THEN
-             j3=j3+1
-             workl(j3)=j1+i-1
-          END IF
-       END IF
-    END DO
-    j=SIZE(work)
-    CALL ISCreateGeneral(Petsc_Comm_World,j,work,Petsc_Copy_Values,RI,  &
-         ierr)
-    j=SIZE(worku)
-    CALL ISCreateGeneral(Petsc_Comm_World,j,worku,Petsc_Copy_Values,    &
-         RIu,ierr)
-    CALL MatGetSubMatrix(Mat_K,RIu,RI,Mat_Initial_Matrix,Mat_H,ierr)
-    IF (nceqs > 0) THEN
-       j=SIZE(workl)
-       CALL ISCreateGeneral(Petsc_Comm_World,j,workl,Petsc_Copy_Values, &
-            RIl,ierr)
-    END IF
-  END SUBROUTINE GenerateUPIndicies
-
-
-
-  
   ! Write results in ASCII VTK (legacy) format
   SUBROUTINE WriteOutput
     IMPLICIT NONE

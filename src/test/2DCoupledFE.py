@@ -7,6 +7,7 @@ from matplotlib.collections import PatchCollection
 import matplotlib.pyplot as plt
 import matplotlib
 import scipy.interpolate
+import netCDF4
 
 import warnings
 warnings.simplefilter(action = "ignore", category = FutureWarning)
@@ -187,6 +188,25 @@ class TwoDimCoupledFEM():
         
         return np.einsum('...ji,jk,...kl,...',dNp,Q,dNp,self.detJ)
             
+    def compute_body_force_RHS(self, xi, eta, rho, g):
+    
+        # Fg = Nu^T * rho * g 
+        
+        Nu = self.Nu(xi, eta)
+        Nu = np.array(Nu).reshape([1,np.size(Nu)])
+        
+        return np.einsum('...ji,...,...,...',Nu,rho,g,self.detJ)
+        
+    def compute_fluid_pressure_force(self, xi, eta, Q, rho_f):
+    
+        # Fp = dNp^T * (k/mu) * rho_f * g
+        g = np.zeros([2,1])
+        g[1] = self.g
+        dNp = self.dNp(xi, eta)
+        return np.einsum('...ji,jk,...,kl...,...',dNp,Q,rho_f,g,self.detJ)        
+        return dNp
+        
+    
     def integrate_element_matrices(self):
             
         #Use 3 x 3 Gauss integration
@@ -213,6 +233,9 @@ class TwoDimCoupledFEM():
         
         
         mob_tensor = self.compute_tensor_mobility(perm,visc)
+        # Temporary global setting
+        self.mob_tensor = self.compute_tensor_mobility(perm,visc)        
+        
             
         K = np.zeros((self.num_elem, 18, 18))
         Q = np.zeros((self.num_elem, 18,  4))
@@ -228,6 +251,36 @@ class TwoDimCoupledFEM():
                                     
         return (K,Q,H,S)
     
+    def integrate_RHS(self):
+
+        #Use 3 x 3 Gauss integration
+        wts = [5 / 9., 8 / 9., 5 / 9.]
+        pts = [-np.sqrt(3 / 5.), 0.0, np.sqrt(3 / 5.)]
+        
+        Fgu = np.zeros((self.num_elem,9,1))
+        Fgp = np.zeros((self.num_elem,4,1))    
+        
+        for i in range(3):
+            for j in range(3):
+                Fgu += wts[i] * self.compute_body_force_RHS(pts[i],pts[j],self.rho,self.g)
+                Fgp += wts[i] * self.compute_fluid_pressure_force(pts[i], pts[j], self.mob_tensor, self.rho_f)
+        return Fgu, Fgp   
+
+    
+    def set_mesh_properties(self):
+
+        # Make up permeability/viscosity info
+        self.perm    = 10. *9.8692327E-16            # m**2
+        self.visc    = 0.002                         # Pa*sec
+        self.phi     = 0.1
+        self.Vp      = 2360                          # m/s
+        self.Vs      = 1302                          # m/s
+        self.rho_m   = 2260                          # kg/m**3
+        self.rho_f   = 1000                          # kg/m**3
+        self.rho     = self.rho_m*(1.0-self.phi) + self.rho_f*self.phi   # Bulk Density, kg/m**3
+        self.Ks      = self.rho*(self.Vp**2 - 0.75 * self.Vs**2)    # Bulk (solid) Modulus, Pa
+        self.Kf      = 1/1e9                         # Fluid Modulus, Pa (1/cf)
+        self.g       = 9.80                          # m/s**2                
     
     def compute_stress_at_gauss_point(self, xi, eta, disp):
         
@@ -274,6 +327,9 @@ class TwoDimCoupledFEM():
     
     def assemble(self):
         
+        # Institute debug system values
+        self.set_mesh_properties()
+        
         #Construct a DOF map.  We'll start by assuming that every node has 3 DOF
         #this is obviously not true, but we'll correct it.
         fake_dof_map = np.zeros(3*len(self.X), dtype=np.int64).reshape(-1, 3)
@@ -307,63 +363,79 @@ class TwoDimCoupledFEM():
         self.Vec_F = np.zeros(total_dof, dtype=np.double)
         
         #The DOF indices cooresponding to displacement
-        idx_disp = (self.dof_map[:,:2][self.connect]).reshape(-1,18)
+        id_disp = (self.dof_map[:,:2][self.connect]).reshape(-1,18)
+        # DOF indicies for x dir displacement
+        idx_disp = (self.dof_map[:,0][self.connect]).reshape(-1,9)                
+        # DOF indicies for x dir displacement
+        idy_disp = (self.dof_map[:,1][self.connect]).reshape(-1,9)                
         
         #The DOF indices cooresponding to pressure, they should not have any -1's
         #because we only choose those that in the first 4 columns of each row in
         #the connectivity
-        idx_pres = self.dof_map[:,-1][self.connect[:,:4]]
+        id_pres = self.dof_map[:,-1][self.connect[:,:4]]
         
         #Integrate element stiffness matrices
         K, Q, H, S = self.integrate_element_matrices()
+
+        #Integrate RHS
+        self.Fgu_old = np.zeros((self.num_elem,9,1))
         
+        Fgu, Fgp = self.integrate_RHS()        
+                
         #Assemble into global stiffness matrix
         for i in range(self.num_elem):
             
             # Add elastic stiffness matrix            
-            idx_grid_disp = np.ix_(idx_disp[i], idx_disp[i])
+            idx_grid_disp = np.ix_(id_disp[i], id_disp[i])
             self.Mat_K[idx_grid_disp]  += -1*K[i]
             
             # Add coupling matrix
-            idx_grid_pres = np.ix_(idx_disp[i], idx_pres[i])
+            idx_grid_pres = np.ix_(id_disp[i], id_pres[i])
             self.Mat_K[idx_grid_pres] += Q[i]
             
             # Add transposed coupling matrix
-            idx_grid_pres = np.ix_(idx_pres[i], idx_disp[i])
+            idx_grid_pres = np.ix_(id_pres[i], id_disp[i])
             self.Mat_K[idx_grid_pres] += Q[i].T
 
             # Add Storativity Matrix            
-            idx_grid_pres = np.ix_(idx_pres[i], idx_pres[i])
+            idx_grid_pres = np.ix_(id_pres[i], id_pres[i])
             self.Mat_K[idx_grid_pres] += S[i]
 
             # Add Fluid Permeability Matrix
-            idx_grid_pres = np.ix_(idx_pres[i], idx_pres[i])
+            idx_grid_pres = np.ix_(id_pres[i], id_pres[i])
             self.Mat_K[idx_grid_pres] += H[i] * self.delta_t / 2
 
 
         #Assemble into global stiffness matrix for RHS
             
             # Add elastic stiffness matrix            
-            idx_grid_disp = np.ix_(idx_disp[i], idx_disp[i])
+            idx_grid_disp = np.ix_(id_disp[i], id_disp[i])
             self.Mat_K_n[idx_grid_disp]  += -1*K[i]
             
             # Add coupling matrix
-            idx_grid_pres = np.ix_(idx_disp[i], idx_pres[i])
+            idx_grid_pres = np.ix_(id_disp[i], id_pres[i])
             self.Mat_K_n[idx_grid_pres] += Q[i]
             
             # Add transposed coupling matrix
-            idx_grid_pres = np.ix_(idx_pres[i], idx_disp[i])
+            idx_grid_pres = np.ix_(id_pres[i], id_disp[i])
             self.Mat_K_n[idx_grid_pres] += Q[i].T
 
             # Add Storativity Matrix            
-            idx_grid_pres = np.ix_(idx_pres[i], idx_pres[i])
+            idx_grid_pres = np.ix_(id_pres[i], id_pres[i])
             self.Mat_K_n[idx_grid_pres] += S[i]
 
             # Add Fluid Permeability Matrix
-            idx_grid_pres = np.ix_(idx_pres[i], idx_pres[i])
+            idx_grid_pres = np.ix_(id_pres[i], id_pres[i])
             self.Mat_K_n[idx_grid_pres] -= H[i] * self.delta_t / 2
 
-
+        #Institute Body Forces (grav)
+        
+            # Add displacement body force
+            idy_vec_disp = np.ix_(idy_disp[i])
+            self.Vec_F[idy_vec_disp] -= (Fgu[i].ravel() - self.Fgu_old[i].ravel()) / self.delta_t
+            
+            idx_vec_pres = np.ix_(id_pres[i])
+            self.Vec_F[idx_vec_pres] += Fgp[i].ravel()
             
     def apply_essential_bc(self, nodes, values, dof="x"):
         
@@ -394,7 +466,7 @@ class TwoDimCoupledFEM():
         self.Vec_F = self.Mat_K_n*self.Vec_F + self.delta_t*self.Vec_F
         
         return scipy.sparse.linalg.spsolve(self.Mat_K,self.Vec_F)
-        
+################################################################################
         
 coords = np.loadtxt("coords.csv", delimiter=',', dtype=np.double)
 connect = np.loadtxt("connect.csv", delimiter=',', dtype=np.int64)
@@ -403,12 +475,36 @@ ns2 = np.loadtxt("nodeset2.csv", delimiter=',', dtype=np.int64)
 ns3 = np.loadtxt("nodeset3.csv", delimiter=',', dtype=np.int64)
 ns4 = np.loadtxt("nodeset4.csv", delimiter=',', dtype=np.int64)
 
-problem = TwoDimCoupledFEM(coords, connect, nu=0.3, mu=9722223330304.0, alpha=0.9)
+# Load from .exo file
+
+nc = netCDF4.Dataset('Inclusion2D_Coarse.exo')
+connect1 =  nc.variables['connect1'][:]
+connect2 =  nc.variables['connect2'][:]
+connect3 =  nc.variables['connect3'][:]
+
+connect = np.vstack( (connect1,connect2,connect3))
+coordx = nc.variables['coordx'][:]
+coordy = nc.variables['coordy'][:]
+coords = np.vstack((coordx,coordy)).T
+
+left    = nc.variables['node_ns2'][:]
+floor   = nc.variables['node_ns3'][:]
+right   = nc.variables['node_ns4'][:]
+top     = nc.variables['node_ns5'][:]
+
+
+problem = TwoDimCoupledFEM(coords, connect, nu=0.3, mu=9722223330304.0, alpha=0.8)
 
 problem.assemble()
 
-problem.apply_essential_bc(ns3,np.zeros(len(ns3)),dof="y")
-problem.apply_essential_bc(ns4,np.zeros(len(ns4)),dof="x")
+problem.apply_essential_bc(floor,np.zeros(len(floor)),dof="y")
+
+#problem.apply_essential_bc(floor,np.ones(len(floor))*100,dof="p")
+problem.apply_essential_bc(left,np.zeros(len(left)),dof="x")
+problem.apply_essential_bc(right,np.zeros(len(right)),dof="x")
+
+problem.apply_essential_bc(top,np.zeros(len(top)),dof="p")
+#problem.apply_essential_bc(ns4,np.zeros(len(ns4)),dof="x")
 
 #ns1 includes displacement nodes on the interior, we can't apply pressure
 #to these, so first we modify ns1 to include only pressure nodes
@@ -425,7 +521,9 @@ deformed_pos = coords + displacement
 
 pres_dof = problem.dof_map[:,-1][np.where(problem.dof_map[:,-1] != -1)]
 pressure = x[pres_dof]
-        
+
+
+################################################################################        
 # Plots
 
 patches = []
@@ -436,9 +534,15 @@ for coord in coords[connect[:,0:4]-1]:
 pres_idx, = np.where(problem.dof_map[:,-1] != -1)
 X = coords[pres_idx,0]
 Y = coords[pres_idx,1]
-grid_x, grid_y = np.mgrid[0:11:700j, 0:11:700j]
+grid_x, grid_y = np.mgrid[0:50:1000j, 0:-50:1000j]
 p = scipy.interpolate.griddata((X, Y), pressure, (grid_x, grid_y), method='cubic')
 
+X = coords[:,0]
+Y = coords[:,1]
+u_x = scipy.interpolate.griddata((X, Y), displacement[:,0], (grid_x, grid_y), method='cubic')
+u_y = scipy.interpolate.griddata((X, Y), displacement[:,1], (grid_x, grid_y), method='cubic')
+displacement_mag = np.sqrt(displacement[:,0] * displacement[:,0] + displacement[:,1] * displacement[:,1])
+disp_mag = scipy.interpolate.griddata((X, Y), displacement_mag, (grid_x, grid_y), method='cubic')
 interior = np.sqrt((grid_x**2 / 0.8**2) + (grid_y**2 / 1**2)) < 1
 p[interior] = np.nan
 
@@ -453,77 +557,77 @@ p.set_linewidth(0.1)
     
 #p.set_array(np.array(colors))
 ax.add_collection(p)
-ax.set_xlim([0, 10])
-ax.set_ylim([0, 10])
+ax.set_xlim([0, 50])
+ax.set_ylim([-50,0])
 ax.set_aspect('equal')        
-        
-# Sigma xx
+#        
+# #Sigma xx
 
-stress = problem.compute_stress(displacement).reshape(-1,3)
-x_gauss_pt, y_gauss_pt = problem.compute_gauss_point_locations(deformed_pos)
-
-
-stress_x = scipy.interpolate.griddata((x_gauss_pt, y_gauss_pt), stress[:,0], (grid_x, grid_y), method='cubic')
-stress_y = scipy.interpolate.griddata((x_gauss_pt, y_gauss_pt), stress[:,1], (grid_x, grid_y), method='cubic')
-stress_xy = scipy.interpolate.griddata((x_gauss_pt, y_gauss_pt), stress[:,2], (grid_x, grid_y), method='cubic')
-stress_x[interior] = np.nan
-stress_y[interior] = np.nan
-stress_xy[interior] = np.nan
+#stress = problem.compute_stress(displacement).reshape(-1,3)
+#x_gauss_pt, y_gauss_pt = problem.compute_gauss_point_locations(deformed_pos)
 
 
-plt.figure()
-plt.gca().set_aspect('equal')
-plt.contourf(grid_x, grid_y, stress_x, cmap="coolwarm",levels=np.linspace(-1, 2, 50))
-plt.colorbar();
-plt.title("$\sigma_{xx}$");
+#stress_x = scipy.interpolate.griddata((x_gauss_pt, y_gauss_pt), stress[:,0], (grid_x, grid_y), method='cubic')
+#stress_y = scipy.interpolate.griddata((x_gauss_pt, y_gauss_pt), stress[:,1], (grid_x, grid_y), method='cubic')
+#stress_xy = scipy.interpolate.griddata((x_gauss_pt, y_gauss_pt), stress[:,2], (grid_x, grid_y), method='cubic')
+##stress_x[interior] = np.nan
+##stress_y[interior] = np.nan
+##stress_xy[interior] = np.nan
+
+
+#plt.figure()
+#plt.gca().set_aspect('equal')
+#plt.contourf(grid_x, grid_y, stress_x, cmap="coolwarm",levels=np.linspace(-1, 2, 50))
+#plt.colorbar();
+#plt.title("$\sigma_{xx}$");
 
 
 # Sigma yy
 
-plt.figure()
-plt.gca().set_aspect('equal')
-plt.contourf(grid_x, grid_y, stress_y, cmap="coolwarm",levels=np.linspace(-1,  2, 50))
-plt.colorbar();
-plt.title("$\sigma_{yy}$");
+#plt.figure()
+#plt.gca().set_aspect('equal')
+#plt.contourf(grid_x, grid_y, stress_y, cmap="coolwarm",levels=np.linspace(-1,  2, 50))
+#plt.colorbar();
+#plt.title("$\sigma_{yy}$");
 
-## Sigma xy
+### Sigma xy
 
-plt.figure()
-plt.gca().set_aspect('equal')
-plt.contourf(grid_x, grid_y, stress_xy, cmap="coolwarm",levels=np.linspace(-1, 1, 50))
-plt.colorbar();
-plt.title("$\sigma_{xy}$");
-        
-        
-# X Disp
+#plt.figure()
+#plt.gca().set_aspect('equal')
+#plt.contourf(grid_x, grid_y, stress_xy, cmap="coolwarm",levels=np.linspace(-1, 1, 50))
+#plt.colorbar();
+#plt.title("$\sigma_{xy}$");
+#        
+#        
+## X Disp
 
-X = coords[:,0]
-Y = coords[:,1]
-disp_x = scipy.interpolate.griddata((X, Y), displacement[:,0], (grid_x, grid_y), method='cubic')
-disp_x[interior] = np.nan
-plt.figure()
-plt.gca().set_aspect('equal')
-plt.contourf(grid_x, grid_y, disp_x, cmap="coolwarm")
-plt.colorbar();
-plt.title("X displacment");
+#X = coords[:,0]
+#Y = coords[:,1]
+#disp_x = scipy.interpolate.griddata((X, Y), displacement[:,0], (grid_x, grid_y), method='cubic')
+##disp_x[interior] = np.nan
+#plt.figure()
+#plt.gca().set_aspect('equal')
+#plt.contourf(grid_x, grid_y, disp_x, cmap="coolwarm")
+#plt.colorbar();
+#plt.title("X displacement");
 
-# Y Disp
+## Y Disp
 
-disp_y = scipy.interpolate.griddata((X, Y), displacement[:,1], (grid_x, grid_y), method='cubic')
-disp_y[interior] = np.nan
-plt.figure()
-plt.gca().set_aspect('equal')
-plt.contourf(grid_x, grid_y, disp_y, cmap="coolwarm")
-plt.colorbar();
-plt.title("Y displacment");
+#disp_y = scipy.interpolate.griddata((X, Y), displacement[:,1], (grid_x, grid_y), method='cubic')
+##disp_y[interior] = np.nan
+#plt.figure()
+#plt.gca().set_aspect('equal')
+#plt.contourf(grid_x, grid_y, disp_y, cmap="coolwarm")
+#plt.colorbar();
+#plt.title("Y displacement");
 
-# Disp Magnitude
+## Disp Magnitude
 
-displacement_mag = np.sqrt(displacement[:,0] * displacement[:,0] + displacement[:,1] * displacement[:,1])
-disp_mag = scipy.interpolate.griddata((X, Y), displacement_mag, (grid_x, grid_y), method='cubic')
-disp_mag[interior] = np.nan
-plt.figure()
-plt.gca().set_aspect('equal')
-plt.contourf(grid_x, grid_y, disp_mag, cmap="coolwarm")#,levels=np.linspace(0.0, 0.06, 50))
-plt.colorbar();
-plt.title("Displacment Magnitude");        
+#displacement_mag = np.sqrt(displacement[:,0] * displacement[:,0] + displacement[:,1] * displacement[:,1])
+#disp_mag = scipy.interpolate.griddata((X, Y), displacement_mag, (grid_x, grid_y), method='cubic')
+##disp_mag[interior] = np.nan
+#plt.figure()
+#plt.gca().set_aspect('equal')
+#plt.contourf(grid_x, grid_y, disp_mag, cmap="coolwarm")#,levels=np.linspace(0.0, 0.06, 50))
+#plt.colorbar();
+#plt.title("Displacement Magnitude");        
