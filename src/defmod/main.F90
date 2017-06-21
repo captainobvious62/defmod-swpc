@@ -57,11 +57,11 @@ PROGRAM main
   PetscQuadrature :: PQ_q
   PetscInt :: order
 
-  
+
 
   ! Debug QS
-!  Vec :: Vec_U_db,Vec_F_db
-!  Mat :: Mat_K_db
+  !  Vec :: Vec_U_db,Vec_F_db
+  !  Mat :: Mat_K_db
   !-----------------------------------------------------------------------------80  
   CALL PetscInitialize(Petsc_Null_Character,ierr)
   CALL MPI_Comm_Rank(MPI_Comm_World,rank,ierr)
@@ -90,7 +90,7 @@ PROGRAM main
   CALL PetscOptionsGetString(Petsc_Null_Object,Petsc_Null_Character,'-db',     &
        debug,db,ierr)
 #endif
-  
+
   ! Read Command Line Flags====================================================80
   ! Respond if no input
   IF (.NOT. l) THEN
@@ -162,13 +162,13 @@ PROGRAM main
      PRINT *, exo_dof
      ! Read in mesh particulars, generate reference vectors
      CALL PrintMsg('Reading Nodal Coordinates from PETSc')
-     
+
      ! Global Coordinates
      CALL DMGetCoordinates(dm,Vec_Coordinates,ierr);CHKERRQ(ierr)
 
      ! Local to Global DM
      CALL DMGetCoordinateDM(dm,cdm,ierr)
-     
+
      CALL PrintMsg('Reading # of Coordinates')
      CALL VecGetSize(Vec_Coordinates,Int_elem,ierr)
      ! Deal with coords in FORTRAN Variables
@@ -236,9 +236,9 @@ PROGRAM main
      CALL PetscFECreateDefault(dm,dmn,1,PETSC_FALSE,"p_",order,FE_fem(2),ierr)
      CALL PetscObjectSetName(FE_fem(2), 'pressure',ierr)
 
-!     DO WHILE (cdm)
-!        CALL DMGetDS(cdm,DS_Prob,ierr)
-        
+     !     DO WHILE (cdm)
+     !        CALL DMGetDS(cdm,DS_Prob,ierr)
+
 
      ! Clean up
      CALL PetscViewerDestroy(ASCIICoordViewer,ierr)
@@ -523,10 +523,15 @@ PROGRAM main
              ierr)
      ELSEIF(fault .AND. nceqs-nceqs_ncf>0 .AND. hyb>0) THEN
         CALL VecCreateMPI(Petsc_Comm_World,Petsc_Decide,nceqs_ncf/(dmn+p)+nfnd,&
-             Vec_lmnd,ierr)
-        CALL VecGetLocalSize(Vec_lmnd,n_lmnd,ierr)
-        CALL VecGetOwnershipRange(Vec_lmnd,lmnd0,j,ierr)
-        CALL VecDestroy(Vec_lmnd,ierr)
+           Vec_lm_pn,ierr)
+        call VecGetLocalSize(Vec_lm_pn,n_lmnd,ierr)
+        call VecGetOwnershipRange(Vec_lm_pn,lmnd0,j,ierr)
+        if (poro) then
+           call VecDuplicate(Vec_lm_pn,Vec_lm_pp,ierr)
+           call VecDuplicate(Vec_lm_pn,Vec_lm_f2s,ierr)
+        else
+           call VecDestroy(Vec_lm_pn,ierr)
+        end if
         ! Dofs of one fault node are not split by different ranks
         CALL VecCreateMPI(Petsc_Comm_World,n_lmnd*dmn,(nceqs_ncf/(dmn+p)+nfnd)*&
              dmn,Vec_lambda_sta,ierr)
@@ -881,25 +886,6 @@ PROGRAM main
      END IF
   END IF
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   !===========================================================================80
   ! Implicit Solver
   IF (stype/="explicit" .AND. (.NOT. fault)) THEN
@@ -1091,7 +1077,8 @@ PROGRAM main
         END DO
      END IF
      IF (t>f0 .AND. dt>f0 .AND. t>=dt) THEN
-
+        ! Vec_U  = Incremental
+        ! Vec_Um = Absolute 
         CALL VecDuplicate(Vec_U,Vec_Um,ierr) ! U->du & Um->u
         CALL VecCopy(Vec_U,Vec_Um,ierr)
         CALL VecGetLocalSize(Vec_U,j,ierr)
@@ -1145,6 +1132,7 @@ PROGRAM main
                    RIl,ierr)
            END IF
            ! END ABORTION OF INDEX SET GENERATION-----------------------------80
+
 
            ! Generate Compressibility Submatrix
            CALL MatGetSubMatrix(Mat_K,RI,RI,Mat_Initial_Matrix,Mat_Kc,ierr)
@@ -1271,8 +1259,8 @@ PROGRAM main
            ! Write output
            IF (vout==1) CALL WriteOutput_x
            IF (nobs_loc>0) CALL WriteOutput_obs
-           !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++80
-           ! Case of initial pressure specification
+!!$           !+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++80
+!!$           ! Case of initial pressure specification
            IF (init==1) THEN
               CALL PrintMsg("Pore fluid initialization...")
               CALL VecGetSubVector(Vec_Um,RI,Vec_Up0,ierr)
@@ -1283,12 +1271,12 @@ PROGRAM main
               tot_uu=f0
               CALL VecZeroEntries(Vec_F,ierr)
               !              CALL VecZeroEntries(Vec_U,ierr)
-              !              CALL VecZeroEntries(Vec_Um,ierr)
+              CALL VecZeroEntries(Vec_Um,ierr)
 
               ! Apply initial force and pressure constraints
               CALL ApplySource
-              !              CALL ApplyGravity
-              !              CALL FormRHS
+              CALL ApplyGravity
+              CALL FormRHS
               CALL VecAssemblyBegin(Vec_F,ierr)
               CALL VecAssemblyEnd(Vec_F,ierr)           
               CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
@@ -1399,7 +1387,9 @@ PROGRAM main
               CALL GetVec_Stress
               CALL GetVec_S
               IF (nceqs>0) THEN
+                 if (poro) call VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
                  CALL GetVec_f2s
+                 if (poro) call VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
                  CALL GetVec_f2s_seq
               ELSE
                  CALL GetVec_ft
@@ -1446,7 +1436,7 @@ PROGRAM main
         DO tstep=1,steps
            t_abs=t_abs+dt
            IF (rank==0) PRINT'(A11,I0)'," Time Step ",tstep
-           ! Reform stiffness matrix, if needed
+           ! Reform stiffness matrix, if needed (e.g. viscoelasticity)
            IF (visco .AND. (tstep==1 .OR. MAXVAL(mat(:,4))>f1)) THEN
               CALL PrintMsg(" Reforming [K] ...")
               CALL MatZeroEntries(Mat_K,ierr)
@@ -1464,6 +1454,7 @@ PROGRAM main
            ! Reform RHS
            CALL VecZeroEntries(Vec_F,ierr)
            CALL PrintMsg(" Reforming RHS ...")
+           ! Account for poroelasticity
            IF (poro) THEN
               CALL VecGetSubVector(Vec_Um,RI,Vec_Up,ierr)
               CALL PrintMsg(" Updating f_p ...")
@@ -1474,6 +1465,7 @@ PROGRAM main
               CALL VecRestoreArrayF90(Vec_I,pntr,ierr)
               j=SIZE(uup)
               CALL VecSetValues(Vec_F,j,work,uup,Add_Values,ierr)
+              call Up_s2d
               CALL VecRestoreSubVector(Vec_Um,RI,Vec_Up,ierr)
               ! Stabilize RHS
               DO i=1,nels
@@ -1482,6 +1474,7 @@ PROGRAM main
                  CALL VecSetValues(Vec_F,npel,indxp,Hs,Add_Values,ierr)
               END DO
            END IF
+           ! Account for viscoelasticity
            IF (visco) THEN
               DO i=1,nels
                  CALL ReformLocalRHS(i,f,indx)
@@ -1489,6 +1482,7 @@ PROGRAM main
                  CALL VecSetValues(Vec_F,eldof,indx,f,Add_Values,ierr)
               END DO
            END IF
+           ! Build RHS
            CALL FormRHS
            IF (fail) THEN 
               CALL FaultSlip
@@ -1496,11 +1490,12 @@ PROGRAM main
               qs_flt_slip=qs_flt_slip+tot_flt_slip
               fail=.FALSE.
            END IF
-           ! Solve
+           ! Solve~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~80
            CALL VecAssemblyBegin(Vec_F,ierr)
            CALL VecAssemblyEnd(Vec_F,ierr)
            CALL PrintMsg(" Solving ...")
            CALL KSPSolve(Krylov,Vec_F,Vec_U,ierr)
+           !------------------------------------------------------------------80
            ! Reset dynamic (slip) solutions 
            IF (nceqs>0 .AND. hyb>0) THEN
               tot_uu_dyn=f0
